@@ -16,7 +16,7 @@ import { handleUserPromptSubmit } from "./handlers/user-prompt-submit.mjs";
 import { handlePostCompact } from "./handlers/post-compact.mjs";
 import { handleStop } from "./handlers/stop.mjs";
 import { log as fileLog } from "./log.mjs";
-import { loadState, saveState, withLock } from "./state-store.mjs";
+import { DEFAULT_STATE, loadState, saveState, withLock } from "./state-store.mjs";
 import { createMcpClient } from "./mcp-client.mjs";
 
 const HANDLERS = {
@@ -42,12 +42,21 @@ function buildDeps(payload) {
   const dataDir = process.env.PLUGIN_DATA || process.env.CLAUDE_PLUGIN_DATA;
   const endpoint = process.env.LIBRARIAN_MCP_URL;
   const token = process.env.LIBRARIAN_AGENT_TOKEN;
+
   // Build the MCP client lazily: a hook that doesn't need to call the server
   // (e.g. when off-record) shouldn't fail just because the env var is unset.
   // Handlers that need the client will fail-soft and log.
+  //
+  // Critical safety: if dataDir is missing we cannot persist state across hook
+  // invocations, which means we cannot detect "session already attached" —
+  // bootstrapping a session would spam start_session every turn. So we refuse
+  // to construct the MCP client at all without a dataDir. Recording is
+  // disabled, but @librarian-driven explicit calls (which go through Codex's
+  // own MCP layer, not this client) still work.
   let _client = null;
   const getClient = () => {
     if (_client) return _client;
+    if (!dataDir) return null;
     if (!endpoint || !token) return null;
     try {
       _client = createMcpClient({ endpoint, token });
@@ -61,7 +70,11 @@ function buildDeps(payload) {
     dataDir,
     payload,
     log: dataDir ? (entry) => fileLog(dataDir, entry) : async () => {},
-    loadState: dataDir ? () => loadState(dataDir) : async () => ({}),
+    // When dataDir is missing we still return DEFAULT_STATE (not `{}`) so
+    // handlers reading `state.private` / `state.session_id` see the sane
+    // defaults rather than `undefined` — which would coerce to false/null
+    // anyway but reads worse and trips strict assertions.
+    loadState: dataDir ? () => loadState(dataDir) : async () => ({ ...DEFAULT_STATE }),
     saveState: dataDir ? (state) => saveState(dataDir, state) : async () => {},
     withLock: dataDir ? (fn) => withLock(dataDir, fn) : (fn) => fn(),
     getClient,

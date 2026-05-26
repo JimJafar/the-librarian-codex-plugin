@@ -81,7 +81,7 @@ test("source=compact bootstraps without a reconciliation pass", async () => {
   assert.deepEqual(callNames, ["start_session"]);
 });
 
-test("source=resume with one stale active session pauses it before bootstrapping", async () => {
+test("source=resume bootstraps first, then pauses one stale active session", async () => {
   const dir = tmp("resume-one");
   const client = makeClient({
     list_sessions: () => LIST_PROSE_ONE_ACTIVE,
@@ -91,19 +91,19 @@ test("source=resume with one stale active session pauses it before bootstrapping
   const deps = makeDeps(dir, { client });
   await handleSessionStart({ source: "resume", cwd: "/p" }, deps);
   const seq = client.calls.map((c) => c.name);
-  assert.deepEqual(seq, ["list_sessions", "pause_session", "start_session"]);
+  assert.deepEqual(seq, ["start_session", "list_sessions", "pause_session"], "bootstrap precedes reconcile so a concurrent UPS can't have its session paused");
   // list filter is active + this source_ref
-  assert.equal(client.calls[0].args.status, "active");
-  assert.equal(client.calls[0].args.source_ref, "codex:run:r-test:cwd:/p");
-  // pause targets the listed id
-  assert.equal(client.calls[1].args.session_id, "ses_old1");
-  assert.match(client.calls[1].args.summary, /reconciliation/i);
+  assert.equal(client.calls[1].args.status, "active");
+  assert.equal(client.calls[1].args.source_ref, "codex:run:r-test:cwd:/p");
+  // pause targets the listed id (which is NOT our newly bootstrapped session)
+  assert.equal(client.calls[2].args.session_id, "ses_old1");
+  assert.match(client.calls[2].args.summary, /reconciliation/i);
   // bootstrap attached the new session
   const state = await loadState(dir);
   assert.equal(state.session_id, "ses_new");
 });
 
-test("source=resume with multiple stale active sessions pauses each before bootstrapping", async () => {
+test("source=resume pauses each stale active session AFTER bootstrap", async () => {
   const dir = tmp("resume-multi");
   const client = makeClient({
     list_sessions: () => LIST_PROSE_TWO_ACTIVE,
@@ -112,6 +112,8 @@ test("source=resume with multiple stale active sessions pauses each before boots
   });
   const deps = makeDeps(dir, { client });
   await handleSessionStart({ source: "resume", cwd: "/p" }, deps);
+  const seq = client.calls.map((c) => c.name);
+  assert.equal(seq[0], "start_session");
   const pauseCalls = client.calls.filter((c) => c.name === "pause_session");
   assert.equal(pauseCalls.length, 2);
   assert.deepEqual(
@@ -120,7 +122,7 @@ test("source=resume with multiple stale active sessions pauses each before boots
   );
 });
 
-test("source=resume with no stale active sessions skips straight to bootstrap", async () => {
+test("source=resume with no stale active sessions just bootstraps", async () => {
   const dir = tmp("resume-empty");
   const client = makeClient({
     list_sessions: () => LIST_PROSE_EMPTY,
@@ -129,7 +131,7 @@ test("source=resume with no stale active sessions skips straight to bootstrap", 
   const deps = makeDeps(dir, { client });
   await handleSessionStart({ source: "resume", cwd: "/p" }, deps);
   const seq = client.calls.map((c) => c.name);
-  assert.deepEqual(seq, ["list_sessions", "start_session"]);
+  assert.deepEqual(seq, ["start_session", "list_sessions"]);
 });
 
 test("source=clear behaves like resume", async () => {
@@ -142,11 +144,40 @@ test("source=clear behaves like resume", async () => {
   const deps = makeDeps(dir, { client });
   await handleSessionStart({ source: "clear", cwd: "/p" }, deps);
   const seq = client.calls.map((c) => c.name);
-  assert.deepEqual(seq, ["list_sessions", "pause_session", "start_session"]);
+  assert.deepEqual(seq, ["start_session", "list_sessions", "pause_session"]);
 });
 
-test("if state.session_id matched a just-paused session it gets cleared before bootstrap", async () => {
-  const dir = tmp("clears-attached");
+test("RACE GUARD: reconcile must NEVER pause the session we just bootstrapped", async () => {
+  // Simulate the worst-case interleave: a concurrent UserPromptSubmit
+  // bootstrap won the lock first, started ses_new, persisted state. Then
+  // list_sessions returns BOTH ses_new (the just-started one) AND an old
+  // stale one. The reconcile must filter ours out.
+  const dir = tmp("race-guard");
+  const listBoth =
+    "Sessions:\n\n" +
+    "1. [active] ours — proj — codex — cwd:/p — 2026-05-26 — n\n   id: ses_new\n" +
+    "2. [active] stale — proj — codex — cwd:/p — 2026-05-26 — n\n   id: ses_stale\n";
+  const client = makeClient({
+    start_session: () => START_PROSE,
+    list_sessions: () => listBoth,
+    pause_session: () => PAUSE_PROSE,
+  });
+  const deps = makeDeps(dir, { client });
+  await handleSessionStart({ source: "resume", cwd: "/p" }, deps);
+  const pauseCalls = client.calls.filter((c) => c.name === "pause_session");
+  const pausedIds = pauseCalls.map((c) => c.args.session_id);
+  assert.deepEqual(pausedIds, ["ses_stale"], "ses_new (our just-bootstrapped session) must not be paused");
+  const state = await loadState(dir);
+  assert.equal(state.session_id, "ses_new", "we remain attached to our session");
+});
+
+test("if a stale session matches state.session_id from a prior run, it gets paused too", async () => {
+  // Pre-existing state pointing at a session that the server still says is
+  // active. After bootstrap reads state and finds nothing — wait, state is
+  // pre-seeded. So the bootstrap will be a no-op (already_attached). Then
+  // reconcile lists [ses_old1] and ses_old1 IS our attached. So we should
+  // NOT pause it — that's the same race-guard semantics.
+  const dir = tmp("preseeded-attached");
   await saveState(dir, { ...DEFAULT_STATE, session_id: "ses_old1", source_ref: "stale" });
   const client = makeClient({
     list_sessions: () => LIST_PROSE_ONE_ACTIVE,
@@ -155,21 +186,27 @@ test("if state.session_id matched a just-paused session it gets cleared before b
   });
   const deps = makeDeps(dir, { client });
   await handleSessionStart({ source: "resume", cwd: "/p" }, deps);
-  // The new session attached (bootstrap saw session_id null after we cleared it).
-  const state = await loadState(dir);
-  assert.equal(state.session_id, "ses_new");
+  // bootstrap is a no-op (already attached), then reconcile lists ses_old1
+  // and filters it out as "ours" — so no pauses.
+  const startCalls = client.calls.filter((c) => c.name === "start_session");
+  assert.equal(startCalls.length, 0, "bootstrap is a no-op when already attached");
+  const pauseCalls = client.calls.filter((c) => c.name === "pause_session");
+  assert.equal(pauseCalls.length, 0, "the only listed session matches state.session_id so nothing to pause");
 });
 
-test("a failed list_sessions during reconciliation falls through to bootstrap (fail-soft)", async () => {
+test("a failed list_sessions during reconciliation doesn't undo the bootstrap (fail-soft)", async () => {
   const dir = tmp("list-fails");
   const client = makeClient({
-    list_sessions: () => { throw new Error("server down"); },
     start_session: () => START_PROSE,
+    list_sessions: () => { throw new Error("server down"); },
   });
   const deps = makeDeps(dir, { client });
   await handleSessionStart({ source: "resume", cwd: "/p" }, deps);
+  // bootstrap fired first and attached; list failed, no pauses.
   const seq = client.calls.map((c) => c.name);
-  assert.deepEqual(seq, ["list_sessions", "start_session"]);
+  assert.deepEqual(seq, ["start_session", "list_sessions"]);
+  const state = await loadState(dir);
+  assert.equal(state.session_id, "ses_new");
 });
 
 test("a failed pause_session on one session doesn't stop the rest from being paused", async () => {

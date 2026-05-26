@@ -98,6 +98,12 @@ function parseEndpoint(endpoint) {
   if (url.username || url.password) {
     throw new McpClientError("config", "Librarian endpoint must not embed credentials");
   }
+  if (url.search) {
+    // A `?token=…` style URL would leak credentials in any logs that capture
+    // URLs (proxies, browser history if it ever ends up there). The bearer
+    // header is the only acceptable carrier.
+    throw new McpClientError("config", "Librarian endpoint must not include a query string");
+  }
   return url;
 }
 

@@ -70,6 +70,12 @@ export async function saveState(dataDir, state) {
 // backoff to avoid lock-step retries) up to `timeoutMs`, then steal the lock
 // only if it is older than `staleMs` (a previous hook crashed after acquiring
 // without releasing).
+//
+// Cross-process safety: O_EXCL open is POSIX-atomic on local filesystems —
+// two separate Codex hook processes contending for this lock will serialise
+// correctly. NOT safe across NFS/SMB mounts (POSIX-atomic O_EXCL is
+// per-mount semantic); $PLUGIN_DATA must be on a local filesystem, which
+// Codex's default of ~/.codex satisfies.
 export async function withLock(dataDir, fn, { timeoutMs = 2000, staleMs = 5000 } = {}) {
   await fs.promises.mkdir(dataDir, { recursive: true });
   const lock = lockPath(dataDir);

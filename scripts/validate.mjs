@@ -127,20 +127,30 @@ function checkBundle() {
   if (!body.startsWith("#!/usr/bin/env node")) {
     fail(`bin/librarian-codex-hook.js: missing shebang banner`);
   }
-  // The bundle must be self-contained: any unresolved `require("…")` of a
-  // node_modules package would crash at hook runtime on the user's machine
-  // because we don't ship node_modules. Allow only Node built-ins.
-  const requireRe = /require\(["']([^"']+)["']\)/g;
-  let m;
+  // The bundle must be self-contained: any unresolved external import would
+  // crash at hook runtime on the user's machine because we don't ship
+  // node_modules. Allow only Node built-ins. The esbuild output is ESM, so
+  // we have to scan both CJS `require()` AND ESM `import … from "…"` /
+  // dynamic `import("…")` — checking only require() would miss an
+  // accidentally-`external`-marked dependency.
   const builtins = new Set([
     "node:fs", "node:path", "node:url", "node:os", "node:child_process",
     "node:module", "node:buffer", "node:stream", "node:events", "node:crypto",
     "fs", "path", "url", "os", "child_process", "module", "buffer", "stream",
     "events", "crypto", "node:async_hooks",
   ]);
-  while ((m = requireRe.exec(body))) {
-    const dep = m[1];
-    if (!builtins.has(dep)) fail(`bin/librarian-codex-hook.js: unbundled require('${dep}')`);
+  const patterns = [
+    /require\(["']([^"']+)["']\)/g,
+    /(?:^|[\s;])(?:import|export)\s[\s\S]*?from\s*["']([^"']+)["']/gm,
+    /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g,
+  ];
+  let m;
+  for (const re of patterns) {
+    re.lastIndex = 0;
+    while ((m = re.exec(body))) {
+      const dep = m[1];
+      if (!builtins.has(dep)) fail(`bin/librarian-codex-hook.js: unbundled dependency '${dep}'`);
+    }
   }
 }
 
