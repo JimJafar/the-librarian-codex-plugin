@@ -37,9 +37,13 @@ test("dispatch routes to the SessionStart handler and logs it", async () => {
     const result = await dispatch({ hook_event_name: "SessionStart", source: "startup" });
     assert.deepEqual(result, {});
     const lines = fs.readFileSync(path.join(dir, "log.jsonl"), "utf8").trim().split("\n");
-    const entry = JSON.parse(lines.at(-1));
-    assert.equal(entry.event, "SessionStart");
-    assert.equal(entry.source, "startup");
+    // The SessionStart handler logs its own event line, then session-bootstrap
+    // (called for `startup`) logs a `bootstrap` outcome line. We just need to
+    // see the SessionStart line emitted somewhere.
+    const events = lines.map((l) => JSON.parse(l));
+    const sessionStartEntry = events.find((e) => e.event === "SessionStart");
+    assert.ok(sessionStartEntry, "expected a SessionStart log entry");
+    assert.equal(sessionStartEntry.source, "startup");
   });
 });
 
@@ -54,7 +58,11 @@ test("dispatch routes each of the four supported events", async () => {
       .trim()
       .split("\n")
       .map((l) => JSON.parse(l).event);
-    assert.deepEqual(events, ["SessionStart", "UserPromptSubmit", "PostCompact", "Stop"]);
+    // The handlers may log additional non-event lines (e.g. SessionStart logs
+    // a `bootstrap` sub-event). What we're asserting here is just that the
+    // four event-name markers were emitted in order.
+    const eventMarkers = events.filter((e) => /^(SessionStart|UserPromptSubmit|PostCompact|Stop)$/.test(e));
+    assert.deepEqual(eventMarkers, ["SessionStart", "UserPromptSubmit", "PostCompact", "Stop"]);
   });
 });
 
