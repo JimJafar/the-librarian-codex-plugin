@@ -7,6 +7,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `AGENTS.md` with the family-wide house rules (privacy, fail-soft,
+  cross-repo contracts, CHANGELOG discipline, etc.) and the
+  Codex-plugin-specific build / test / gotcha notes. Sibling
+  AGENTS.md files in the four other Librarian repos share the same
+  baseline.
+
 ## [0.1.0] — 2026-05-26
 
 Initial public release. Gives [Codex](https://developers.openai.com/codex)
