@@ -15,6 +15,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   AGENTS.md files in the four other Librarian repos share the same
   baseline.
 
+### Changed
+
+- **AGENTS.md §2** updated: the canonical TS privacy-detector source
+  in `the-librarian/integrations/shared/librarian-lifecycle/` was
+  deleted when the family went fully standalone. The privacy detector
+  here (`src/privacy-detector.mjs`) is now one of five peer
+  implementations across the family (Claude Code, this repo, Hermes,
+  OpenCode, Pi). Coordinate any marker-list change across all five
+  repos.
+
 ## [0.1.0] — 2026-05-26
 
 Initial public release. Gives [Codex](https://developers.openai.com/codex)
