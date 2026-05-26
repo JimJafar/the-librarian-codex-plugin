@@ -1,0 +1,114 @@
+// src/dispatch.mjs
+// Single entry point bundled into bin/librarian-codex-hook.js. Reads the
+// Codex hook payload from stdin, routes by `hook_event_name` to a handler,
+// writes the JSON result (or `{}` on any failure) to stdout, and exits 0.
+//
+// Two invariants every hook obeys:
+//  1. Always exit 0. A non-zero exit blocks Codex's turn and we are not in
+//     the business of that — the privacy gate is "don't record", not "stop
+//     the model".
+//  2. Stdout is hook protocol. Never print stray debug output: a stray line
+//     on `UserPromptSubmit` would be injected into the model's context.
+//     All diagnostics go through src/log.mjs to a sidecar log.jsonl.
+
+import { handleSessionStart } from "./handlers/session-start.mjs";
+import { handleUserPromptSubmit } from "./handlers/user-prompt-submit.mjs";
+import { handlePostCompact } from "./handlers/post-compact.mjs";
+import { handleStop } from "./handlers/stop.mjs";
+import { log as fileLog } from "./log.mjs";
+import { loadState, saveState, withLock } from "./state-store.mjs";
+import { createMcpClient } from "./mcp-client.mjs";
+
+const HANDLERS = {
+  SessionStart: handleSessionStart,
+  UserPromptSubmit: handleUserPromptSubmit,
+  PostCompact: handlePostCompact,
+  Stop: handleStop,
+};
+
+async function readStdinJson() {
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(chunk);
+  const raw = Buffer.concat(chunks).toString("utf8").trim();
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function buildDeps(payload) {
+  const dataDir = process.env.PLUGIN_DATA || process.env.CLAUDE_PLUGIN_DATA;
+  const endpoint = process.env.LIBRARIAN_MCP_URL;
+  const token = process.env.LIBRARIAN_AGENT_TOKEN;
+  // Build the MCP client lazily: a hook that doesn't need to call the server
+  // (e.g. when off-record) shouldn't fail just because the env var is unset.
+  // Handlers that need the client will fail-soft and log.
+  let _client = null;
+  const getClient = () => {
+    if (_client) return _client;
+    if (!endpoint || !token) return null;
+    try {
+      _client = createMcpClient({ endpoint, token });
+    } catch {
+      _client = null;
+    }
+    return _client;
+  };
+
+  return {
+    dataDir,
+    payload,
+    log: dataDir ? (entry) => fileLog(dataDir, entry) : async () => {},
+    loadState: dataDir ? () => loadState(dataDir) : async () => ({}),
+    saveState: dataDir ? (state) => saveState(dataDir, state) : async () => {},
+    withLock: dataDir ? (fn) => withLock(dataDir, fn) : (fn) => fn(),
+    getClient,
+    now: () => Date.now(),
+    env: process.env,
+  };
+}
+
+export async function dispatch(payload) {
+  const event = payload?.hook_event_name;
+  const handler = HANDLERS[event];
+  const deps = buildDeps(payload);
+  if (!handler) {
+    await deps.log({ event: "unknown", payload_event: event });
+    return {};
+  }
+  try {
+    const result = await handler(payload, deps);
+    return result ?? {};
+  } catch (err) {
+    // A handler that throws is a bug. Log it but still return {} so the
+    // turn proceeds.
+    await deps.log({ event, error: String(err?.message ?? err), stack: err?.stack });
+    return {};
+  }
+}
+
+export async function main() {
+  const payload = await readStdinJson();
+  const result = await dispatch(payload);
+  // Stdout is protocol — `{}` is the universal allow/no-op response.
+  process.stdout.write(JSON.stringify(result));
+}
+
+// Run main() when invoked as a script. When bundled the entry sits at the top
+// of the bundle, so we check argv1 ends with our bin name to avoid running on
+// test imports. For tests, `dispatch()` is the public surface.
+const entryName = (process.argv[1] ?? "").split("/").pop() ?? "";
+if (entryName === "librarian-codex-hook.js" || entryName === "dispatch.mjs") {
+  // Top-level await is fine in ESM. Never let an uncaught reject blow up.
+  main().catch(async (err) => {
+    try {
+      const dataDir = process.env.PLUGIN_DATA || process.env.CLAUDE_PLUGIN_DATA;
+      if (dataDir) await fileLog(dataDir, { event: "fatal", error: String(err?.message ?? err) });
+    } catch {
+      /* swallow */
+    }
+    process.stdout.write("{}");
+  });
+}
