@@ -22,6 +22,24 @@ function extractSessionId(text) {
   const m = (text ?? "").match(ID_RE);
   return m ? m[1] : null;
 }
+function parseSessionList(text) {
+  const lines = (text ?? "").split("\n");
+  const sessions = [];
+  let pending = null;
+  for (const line of lines) {
+    const head = line.match(/^\d+\.\s*\[([^\]]+)\]\s*(.*)$/);
+    if (head) {
+      pending = { status: head[1].trim(), title: head[2].trim() };
+      continue;
+    }
+    const idLine = line.match(/^\s*id:\s*(ses_[A-Za-z0-9-]+)/);
+    if (idLine && pending) {
+      sessions.push({ id: idLine[1], ...pending });
+      pending = null;
+    }
+  }
+  return sessions;
+}
 
 // src/handlers/session-bootstrap.mjs
 var HARNESS = "codex";
@@ -88,13 +106,71 @@ function deriveStartSummary(payload) {
 }
 
 // src/handlers/session-start.mjs
+var RECONCILE_SOURCES = /* @__PURE__ */ new Set(["resume", "clear"]);
 async function handleSessionStart(payload, deps) {
   const source = payload?.source ?? null;
   await deps.log({ event: "SessionStart", source });
-  if (source === "startup" || source === "compact" || source == null) {
-    await bootstrapSession(payload, deps);
+  if (RECONCILE_SOURCES.has(source)) {
+    await reconcileStaleActive(payload, deps);
   }
+  await bootstrapSession(payload, deps);
   return {};
+}
+async function reconcileStaleActive(payload, deps) {
+  const state = await deps.loadState();
+  if (state.private) {
+    await deps.log({ event: "SessionStart", outcome: "reconcile_skipped_private" });
+    return;
+  }
+  const client = deps.getClient();
+  if (!client) {
+    await deps.log({ event: "SessionStart", outcome: "reconcile_skipped_no_client" });
+    return;
+  }
+  const sourceRef = sourceRefFromPayload(payload, deps.env);
+  let listText = "";
+  try {
+    listText = await client.callTool("list_sessions", {
+      source_ref: sourceRef,
+      status: "active"
+    });
+  } catch (err) {
+    await deps.log({
+      event: "SessionStart",
+      outcome: "reconcile_list_failed",
+      error: String(err?.message ?? err)
+    });
+    return;
+  }
+  const sessions = parseSessionList(listText);
+  if (sessions.length === 0) {
+    await deps.log({ event: "SessionStart", outcome: "reconcile_no_active" });
+    return;
+  }
+  let paused = 0;
+  for (const s of sessions) {
+    try {
+      await client.callTool("pause_session", {
+        session_id: s.id,
+        summary: "codex resume reconciliation"
+      });
+      paused += 1;
+    } catch (err) {
+      await deps.log({
+        event: "SessionStart",
+        outcome: "pause_failed",
+        session_id: s.id,
+        error: String(err?.message ?? err)
+      });
+    }
+  }
+  if (state.session_id && sessions.some((s) => s.id === state.session_id)) {
+    await deps.withLock(async () => {
+      const latest = await deps.loadState();
+      await deps.saveState({ ...latest, session_id: null, source_ref: null });
+    });
+  }
+  await deps.log({ event: "SessionStart", outcome: "reconciled", paused });
 }
 
 // src/privacy-detector.mjs
