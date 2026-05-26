@@ -15,44 +15,48 @@ export async function handleUserPromptSubmit(payload, deps) {
   const prompt = payload?.prompt ?? "";
   await deps.log({ event: "UserPromptSubmit", prompt_len: prompt.length });
 
-  const signal = detectPrivacySignal(prompt);
-  if (signal.signal === "enter-private" || signal.signal === "toggle") {
-    await applyEnterPrivate(deps, signal);
-    return {};
-  }
-  if (signal.signal === "exit-private") {
-    await applyExitPrivate(deps, signal);
-    // Don't bootstrap on the same turn that exits private — the user may not
-    // want this prompt itself recorded. The next non-marker prompt's
-    // UserPromptSubmit (or a SessionStart on resume) will bootstrap.
-    return {};
-  }
+  const { signal, matched } = detectPrivacySignal(prompt);
 
-  // Non-marker prompt. Bootstrap if not already attached + not private.
-  await bootstrapSession(payload, deps).catch(async (err) => {
-    // bootstrapSession is itself fail-soft, but belt-and-braces: a thrown
-    // error here must never block the turn.
-    await deps.log({ event: "UserPromptSubmit", outcome: "bootstrap_threw", error: String(err?.message ?? err) });
-  });
-  return {};
+  switch (signal) {
+    case "enter-private":
+      await goPrivate(deps, { reason: matched });
+      return {};
+    case "exit-private":
+      await goPublic(deps, { reason: matched });
+      // Don't bootstrap on the same turn that exits private — the marker
+      // turn itself isn't recorded. The next non-marker turn will.
+      return {};
+    case "toggle": {
+      const state = await deps.loadState();
+      if (state.private) await goPublic(deps, { reason: "toggle" });
+      else await goPrivate(deps, { reason: "toggle" });
+      return {};
+    }
+    case "none":
+    default:
+      await bootstrapSession(payload, deps).catch(async (err) => {
+        // bootstrapSession is itself fail-soft, but belt-and-braces: a
+        // thrown error here must never block the turn.
+        await deps.log({
+          event: "UserPromptSubmit",
+          outcome: "bootstrap_threw",
+          error: String(err?.message ?? err),
+        });
+      });
+      return {};
+  }
 }
 
-async function applyEnterPrivate(deps, signal) {
+// Transition to private mode. End any attached session with a neutral reason
+// so the dashboard reads "switching to private mode" rather than just
+// "ended" with no context. Never throws — privacy must always win.
+async function goPrivate(deps, { reason }) {
   await deps.withLock(async () => {
     const state = await deps.loadState();
-    // Toggle in private mode → going public.
-    if (signal.signal === "toggle" && state.private) {
-      await deps.saveState({ ...state, private: false });
-      await deps.log({ event: "UserPromptSubmit", outcome: "exited_private_via_toggle" });
-      return;
-    }
     if (state.private) {
-      await deps.log({ event: "UserPromptSubmit", outcome: "already_private" });
+      await deps.log({ event: "UserPromptSubmit", outcome: "already_private", matched: reason });
       return;
     }
-    // Going private. End any attached session with a neutral reason so the
-    // dashboard reads "switching to private mode" rather than "ended" with
-    // no context.
     if (state.session_id) {
       const client = deps.getClient();
       if (client) {
@@ -71,18 +75,18 @@ async function applyEnterPrivate(deps, signal) {
       }
     }
     await deps.saveState({ ...state, session_id: null, source_ref: null, private: true });
-    await deps.log({ event: "UserPromptSubmit", outcome: "entered_private", matched: signal.matched });
+    await deps.log({ event: "UserPromptSubmit", outcome: "entered_private", matched: reason });
   });
 }
 
-async function applyExitPrivate(deps, signal) {
+async function goPublic(deps, { reason }) {
   await deps.withLock(async () => {
     const state = await deps.loadState();
     if (!state.private) {
-      await deps.log({ event: "UserPromptSubmit", outcome: "already_public", matched: signal.matched });
+      await deps.log({ event: "UserPromptSubmit", outcome: "already_public", matched: reason });
       return;
     }
     await deps.saveState({ ...state, private: false });
-    await deps.log({ event: "UserPromptSubmit", outcome: "exited_private", matched: signal.matched });
+    await deps.log({ event: "UserPromptSubmit", outcome: "exited_private", matched: reason });
   });
 }
