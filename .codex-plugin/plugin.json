@@ -11,6 +11,7 @@
   "license": "Apache-2.0",
   "keywords": ["memory", "sessions", "mcp", "librarian", "recall", "handover"],
   "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "The Librarian",
     "shortDescription": "Durable memory + automatic session lifecycle for Codex",
