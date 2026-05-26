@@ -54,6 +54,26 @@ test("marketplace.json points at this plugin as a local source", () => {
   assert.equal(typeof entry.policy, "object");
 });
 
+test("plugin manifest points at the bundled MCP servers file", () => {
+  const m = readJson(".codex-plugin/plugin.json");
+  assert.equal(m.mcpServers, "./.mcp.json", "mcpServers must point at the plugin-bundled .mcp.json so Codex auto-registers the-librarian on install");
+});
+
+test(".mcp.json declares the-librarian as an HTTP MCP server templated from env vars", () => {
+  const m = readJson(".mcp.json");
+  assert.equal(typeof m.mcpServers, "object");
+  const server = m.mcpServers["the-librarian"];
+  assert.ok(server, "server must be registered under the namespaced name 'the-librarian'");
+  assert.equal(server.type, "http", "transport is HTTP (remote Librarian)");
+  assert.equal(server.url, "${LIBRARIAN_MCP_URL}", "url is templated from the user's env so the same plugin works against any deployment");
+  assert.equal(typeof server.headers, "object");
+  assert.equal(
+    server.headers.Authorization,
+    "Bearer ${LIBRARIAN_AGENT_TOKEN}",
+    "bearer token comes from env — never committed",
+  );
+});
+
 test("the @librarian skill exists with non-empty SKILL.md", () => {
   const skillPath = path.join(repoRoot, "skills/librarian/SKILL.md");
   assert.ok(fs.existsSync(skillPath), "skills/librarian/SKILL.md must exist");
