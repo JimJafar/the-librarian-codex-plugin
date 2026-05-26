@@ -455,11 +455,31 @@ function deriveTurnSummary(payload) {
 import fs from "node:fs";
 import path2 from "node:path";
 var LOG_FILENAME = "log.jsonl";
+var ROTATED_FILENAME = "log.jsonl.1";
+var MAX_LOG_BYTES = 5 * 1024 * 1024;
 async function log(dataDir, entry) {
   try {
     await fs.promises.mkdir(dataDir, { recursive: true });
+    const file = path2.join(dataDir, LOG_FILENAME);
+    await rotateIfNeeded(dataDir, file);
     const line = JSON.stringify({ ts: (/* @__PURE__ */ new Date()).toISOString(), ...entry }) + "\n";
-    await fs.promises.appendFile(path2.join(dataDir, LOG_FILENAME), line, "utf8");
+    await fs.promises.appendFile(file, line, "utf8");
+  } catch {
+  }
+}
+async function rotateIfNeeded(dataDir, file) {
+  let size;
+  try {
+    const stat = await fs.promises.stat(file);
+    size = stat.size;
+  } catch (err) {
+    if (err.code === "ENOENT") return;
+    return;
+  }
+  if (size < MAX_LOG_BYTES) return;
+  const rotated = path2.join(dataDir, ROTATED_FILENAME);
+  try {
+    await fs.promises.rename(file, rotated);
   } catch {
   }
 }
