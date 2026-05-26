@@ -1,0 +1,25 @@
+{
+  "name": "the-librarian",
+  "version": "0.1.0",
+  "description": "Durable memory + cross-harness session lifecycle for Codex, backed by a remote Librarian MCP server.",
+  "author": {
+    "name": "Jim Sangwine",
+    "email": "jim@sangwine.net"
+  },
+  "homepage": "https://github.com/JimJafar/the-librarian-codex-plugin",
+  "repository": "https://github.com/JimJafar/the-librarian-codex-plugin",
+  "license": "Apache-2.0",
+  "keywords": ["memory", "sessions", "mcp", "librarian", "recall", "handover"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "The Librarian",
+    "shortDescription": "Durable memory + automatic session lifecycle for Codex",
+    "longDescription": "The Librarian gives Codex a remote memory + session layer: recall/remember tools, automatic per-session lifecycle (start, checkpoint, pause, resume), and an off-record privacy gate. Sibling to the Claude Code and Hermes plugins; sessions hand over cleanly between harnesses.",
+    "developerName": "Jim Sangwine",
+    "category": "Engineering",
+    "capabilities": ["Read", "Write"],
+    "defaultPrompt": [
+      "Start a Librarian session and recall what we know about the current project."
+    ]
+  }
+}
