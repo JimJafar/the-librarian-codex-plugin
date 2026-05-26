@@ -1,0 +1,32 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "${PLUGIN_ROOT}/scripts/dispatch.sh" }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "${PLUGIN_ROOT}/scripts/dispatch.sh" }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          { "type": "command", "command": "${PLUGIN_ROOT}/scripts/dispatch.sh" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "${PLUGIN_ROOT}/scripts/dispatch.sh" }
+        ]
+      }
+    ]
+  }
+}
