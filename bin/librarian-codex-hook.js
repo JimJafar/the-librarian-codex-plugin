@@ -239,30 +239,37 @@ function detectPrivacySignal(prompt, { privateMarkers, publicMarkers } = {}) {
 async function handleUserPromptSubmit(payload, deps) {
   const prompt = payload?.prompt ?? "";
   await deps.log({ event: "UserPromptSubmit", prompt_len: prompt.length });
-  const signal = detectPrivacySignal(prompt);
-  if (signal.signal === "enter-private" || signal.signal === "toggle") {
-    await applyEnterPrivate(deps, signal);
-    return {};
+  const { signal, matched } = detectPrivacySignal(prompt);
+  switch (signal) {
+    case "enter-private":
+      await goPrivate(deps, { reason: matched });
+      return {};
+    case "exit-private":
+      await goPublic(deps, { reason: matched });
+      return {};
+    case "toggle": {
+      const state = await deps.loadState();
+      if (state.private) await goPublic(deps, { reason: "toggle" });
+      else await goPrivate(deps, { reason: "toggle" });
+      return {};
+    }
+    case "none":
+    default:
+      await bootstrapSession(payload, deps).catch(async (err) => {
+        await deps.log({
+          event: "UserPromptSubmit",
+          outcome: "bootstrap_threw",
+          error: String(err?.message ?? err)
+        });
+      });
+      return {};
   }
-  if (signal.signal === "exit-private") {
-    await applyExitPrivate(deps, signal);
-    return {};
-  }
-  await bootstrapSession(payload, deps).catch(async (err) => {
-    await deps.log({ event: "UserPromptSubmit", outcome: "bootstrap_threw", error: String(err?.message ?? err) });
-  });
-  return {};
 }
-async function applyEnterPrivate(deps, signal) {
+async function goPrivate(deps, { reason }) {
   await deps.withLock(async () => {
     const state = await deps.loadState();
-    if (signal.signal === "toggle" && state.private) {
-      await deps.saveState({ ...state, private: false });
-      await deps.log({ event: "UserPromptSubmit", outcome: "exited_private_via_toggle" });
-      return;
-    }
     if (state.private) {
-      await deps.log({ event: "UserPromptSubmit", outcome: "already_private" });
+      await deps.log({ event: "UserPromptSubmit", outcome: "already_private", matched: reason });
       return;
     }
     if (state.session_id) {
@@ -283,18 +290,18 @@ async function applyEnterPrivate(deps, signal) {
       }
     }
     await deps.saveState({ ...state, session_id: null, source_ref: null, private: true });
-    await deps.log({ event: "UserPromptSubmit", outcome: "entered_private", matched: signal.matched });
+    await deps.log({ event: "UserPromptSubmit", outcome: "entered_private", matched: reason });
   });
 }
-async function applyExitPrivate(deps, signal) {
+async function goPublic(deps, { reason }) {
   await deps.withLock(async () => {
     const state = await deps.loadState();
     if (!state.private) {
-      await deps.log({ event: "UserPromptSubmit", outcome: "already_public", matched: signal.matched });
+      await deps.log({ event: "UserPromptSubmit", outcome: "already_public", matched: reason });
       return;
     }
     await deps.saveState({ ...state, private: false });
-    await deps.log({ event: "UserPromptSubmit", outcome: "exited_private", matched: signal.matched });
+    await deps.log({ event: "UserPromptSubmit", outcome: "exited_private", matched: reason });
   });
 }
 
@@ -653,6 +660,7 @@ async function readCapped(response, cap) {
 }
 
 // src/dispatch.mjs
+import { pathToFileURL } from "node:url";
 var HANDLERS = {
   SessionStart: handleSessionStart,
   UserPromptSubmit: handleUserPromptSubmit,
@@ -720,8 +728,8 @@ async function main() {
   const result = await dispatch(payload);
   process.stdout.write(JSON.stringify(result));
 }
-var entryName = (process.argv[1] ?? "").split("/").pop() ?? "";
-if (entryName === "librarian-codex-hook.js" || entryName === "dispatch.mjs") {
+var isEntryPoint = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isEntryPoint) {
   main().catch(async (err) => {
     try {
       const dataDir = process.env.PLUGIN_DATA || process.env.CLAUDE_PLUGIN_DATA;

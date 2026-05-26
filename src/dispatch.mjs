@@ -96,12 +96,17 @@ export async function main() {
   process.stdout.write(JSON.stringify(result));
 }
 
-// Run main() when invoked as a script. When bundled the entry sits at the top
-// of the bundle, so we check argv1 ends with our bin name to avoid running on
-// test imports. For tests, `dispatch()` is the public surface.
-const entryName = (process.argv[1] ?? "").split("/").pop() ?? "";
-if (entryName === "librarian-codex-hook.js" || entryName === "dispatch.mjs") {
-  // Top-level await is fine in ESM. Never let an uncaught reject blow up.
+// Run main() only when invoked as the entry point — never on test imports.
+// The canonical ESM pattern: compare import.meta.url to the URL form of
+// process.argv[1]. Works for both `node src/dispatch.mjs` and the bundled
+// `node bin/librarian-codex-hook.js`.
+import { pathToFileURL } from "node:url";
+
+const isEntryPoint =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isEntryPoint) {
+  // Never let an uncaught reject blow up — always write `{}` and exit 0.
   main().catch(async (err) => {
     try {
       const dataDir = process.env.PLUGIN_DATA || process.env.CLAUDE_PLUGIN_DATA;
