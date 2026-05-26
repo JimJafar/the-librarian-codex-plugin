@@ -58,11 +58,13 @@ test("dispatch routes each of the four supported events", async () => {
       .trim()
       .split("\n")
       .map((l) => JSON.parse(l).event);
-    // The handlers may log additional non-event lines (e.g. SessionStart logs
-    // a `bootstrap` sub-event). What we're asserting here is just that the
-    // four event-name markers were emitted in order.
+    // Handlers may log the canonical event name multiple times (entry +
+    // outcome lines share the same `event` field). What we're asserting is
+    // that each of the four events appeared in routing order — dedupe
+    // consecutive duplicates to get the routing sequence.
     const eventMarkers = events.filter((e) => /^(SessionStart|UserPromptSubmit|PostCompact|Stop)$/.test(e));
-    assert.deepEqual(eventMarkers, ["SessionStart", "UserPromptSubmit", "PostCompact", "Stop"]);
+    const routingSequence = eventMarkers.filter((e, i) => e !== eventMarkers[i - 1]);
+    assert.deepEqual(routingSequence, ["SessionStart", "UserPromptSubmit", "PostCompact", "Stop"]);
   });
 });
 
