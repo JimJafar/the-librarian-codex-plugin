@@ -5,9 +5,11 @@
 //     itself handles the checkpoint).
 //   - "resume": user explicitly resumed. There MAY be a stale `active`
 //     session for this source_ref on the server (no SessionEnd hook means
-//     a hard exit leaves one). Pause it before bootstrapping a new one.
-//   - "clear": context was cleared. Same as resume — reconcile, then start
-//     fresh.
+//     a hard exit leaves one). Bootstrap first, THEN pause anything else
+//     active for this source_ref — the inverted order closes the
+//     reconcile-vs-bootstrap race against a concurrent UserPromptSubmit
+//     that may have already started a fresh session.
+//   - "clear": context was cleared. Same as resume.
 
 import { bootstrapSession } from "./session-bootstrap.mjs";
 import { sourceRefFromPayload } from "../source-ref.mjs";
@@ -19,18 +21,24 @@ export async function handleSessionStart(payload, deps) {
   const source = payload?.source ?? null;
   await deps.log({ event: "SessionStart", source });
 
+  // Bootstrap first. Whether this attaches a new session or finds one
+  // already attached, the subsequent reconcile knows exactly which session
+  // is "ours" and won't pause it. This inversion fixes the race where the
+  // old order (reconcile, then bootstrap) could pause a session a
+  // concurrent UserPromptSubmit had just attached.
+  await bootstrapSession(payload, deps);
+
   if (RECONCILE_SOURCES.has(source)) {
     await reconcileStaleActive(payload, deps);
   }
-  await bootstrapSession(payload, deps);
   return {};
 }
 
 async function reconcileStaleActive(payload, deps) {
-  // Off-record: nothing to reconcile (we wouldn't have started a session
-  // anyway). No-client: can't reach the server — fail-soft.
-  const state = await deps.loadState();
-  if (state.private) {
+  // Off-record: nothing to reconcile. No-client: can't reach the server —
+  // fail-soft.
+  const stateBefore = await deps.loadState();
+  if (stateBefore.private) {
     await deps.log({ event: "SessionStart", outcome: "reconcile_skipped_private" });
     return;
   }
@@ -57,7 +65,17 @@ async function reconcileStaleActive(payload, deps) {
   }
 
   const sessions = parseSessionList(listText);
-  if (sessions.length === 0) {
+  // Re-read state under lock to capture whichever session was attached
+  // (could have been started by either this SessionStart's bootstrap or a
+  // concurrent UserPromptSubmit's bootstrap). Anything in the list that
+  // isn't ours is a stale active to pause.
+  const ourSessionId = await deps.withLock(async () => {
+    const s = await deps.loadState();
+    return s.session_id;
+  });
+  const stale = sessions.filter((s) => s.id !== ourSessionId);
+
+  if (stale.length === 0) {
     await deps.log({ event: "SessionStart", outcome: "reconcile_no_active" });
     return;
   }
@@ -65,7 +83,7 @@ async function reconcileStaleActive(payload, deps) {
   // Pause each one. Fail-soft per session — a single 500 shouldn't stop us
   // from pausing the rest.
   let paused = 0;
-  for (const s of sessions) {
+  for (const s of stale) {
     try {
       await client.callTool("pause_session", {
         session_id: s.id,
@@ -80,15 +98,6 @@ async function reconcileStaleActive(payload, deps) {
         error: String(err?.message ?? err),
       });
     }
-  }
-
-  // If state.session_id pointed at one of the just-paused sessions, clear it
-  // so the bootstrap that follows opens a fresh session.
-  if (state.session_id && sessions.some((s) => s.id === state.session_id)) {
-    await deps.withLock(async () => {
-      const latest = await deps.loadState();
-      await deps.saveState({ ...latest, session_id: null, source_ref: null });
-    });
   }
   await deps.log({ event: "SessionStart", outcome: "reconciled", paused });
 }

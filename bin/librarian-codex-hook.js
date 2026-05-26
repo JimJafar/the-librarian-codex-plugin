@@ -110,15 +110,15 @@ var RECONCILE_SOURCES = /* @__PURE__ */ new Set(["resume", "clear"]);
 async function handleSessionStart(payload, deps) {
   const source = payload?.source ?? null;
   await deps.log({ event: "SessionStart", source });
+  await bootstrapSession(payload, deps);
   if (RECONCILE_SOURCES.has(source)) {
     await reconcileStaleActive(payload, deps);
   }
-  await bootstrapSession(payload, deps);
   return {};
 }
 async function reconcileStaleActive(payload, deps) {
-  const state = await deps.loadState();
-  if (state.private) {
+  const stateBefore = await deps.loadState();
+  if (stateBefore.private) {
     await deps.log({ event: "SessionStart", outcome: "reconcile_skipped_private" });
     return;
   }
@@ -143,12 +143,17 @@ async function reconcileStaleActive(payload, deps) {
     return;
   }
   const sessions = parseSessionList(listText);
-  if (sessions.length === 0) {
+  const ourSessionId = await deps.withLock(async () => {
+    const s = await deps.loadState();
+    return s.session_id;
+  });
+  const stale = sessions.filter((s) => s.id !== ourSessionId);
+  if (stale.length === 0) {
     await deps.log({ event: "SessionStart", outcome: "reconcile_no_active" });
     return;
   }
   let paused = 0;
-  for (const s of sessions) {
+  for (const s of stale) {
     try {
       await client.callTool("pause_session", {
         session_id: s.id,
@@ -163,12 +168,6 @@ async function reconcileStaleActive(payload, deps) {
         error: String(err?.message ?? err)
       });
     }
-  }
-  if (state.session_id && sessions.some((s) => s.id === state.session_id)) {
-    await deps.withLock(async () => {
-      const latest = await deps.loadState();
-      await deps.saveState({ ...latest, session_id: null, source_ref: null });
-    });
   }
   await deps.log({ event: "SessionStart", outcome: "reconciled", paused });
 }
@@ -266,43 +265,76 @@ async function handleUserPromptSubmit(payload, deps) {
   }
 }
 async function goPrivate(deps, { reason }) {
-  await deps.withLock(async () => {
-    const state = await deps.loadState();
-    if (state.private) {
-      await deps.log({ event: "UserPromptSubmit", outcome: "already_private", matched: reason });
-      return;
-    }
-    if (state.session_id) {
-      const client = deps.getClient();
-      if (client) {
-        try {
-          await client.callTool("end_session", {
-            session_id: state.session_id,
-            summary: "switching to private mode"
-          });
-        } catch (err) {
-          await deps.log({
-            event: "UserPromptSubmit",
-            outcome: "end_session_failed_during_enter_private",
-            error: String(err?.message ?? err)
-          });
-        }
+  try {
+    await deps.withLock(async () => {
+      const state = await deps.loadState();
+      if (state.private) {
+        await deps.log({ event: "UserPromptSubmit", outcome: "already_private", matched: reason });
+        return;
       }
+      await endAttachedSessionIfAny(state, deps);
+      await deps.saveState({ ...state, session_id: null, source_ref: null, private: true });
+      await deps.log({ event: "UserPromptSubmit", outcome: "entered_private", matched: reason });
+    });
+  } catch (err) {
+    await deps.log({
+      event: "UserPromptSubmit",
+      outcome: "lock_failed_during_enter_private_falling_back",
+      error: String(err?.message ?? err)
+    });
+    try {
+      const state = await deps.loadState();
+      await endAttachedSessionIfAny(state, deps);
+      await deps.saveState({ ...state, session_id: null, source_ref: null, private: true });
+    } catch (err2) {
+      await deps.log({
+        event: "UserPromptSubmit",
+        outcome: "fallback_save_failed",
+        error: String(err2?.message ?? err2)
+      });
     }
-    await deps.saveState({ ...state, session_id: null, source_ref: null, private: true });
-    await deps.log({ event: "UserPromptSubmit", outcome: "entered_private", matched: reason });
-  });
+  }
+}
+async function endAttachedSessionIfAny(state, deps) {
+  if (!state.session_id) return;
+  const client = deps.getClient();
+  if (!client) return;
+  try {
+    await client.callTool("end_session", {
+      session_id: state.session_id,
+      summary: "switching to private mode"
+    });
+  } catch (err) {
+    await deps.log({
+      event: "UserPromptSubmit",
+      outcome: "end_session_failed_during_enter_private",
+      error: String(err?.message ?? err)
+    });
+  }
 }
 async function goPublic(deps, { reason }) {
-  await deps.withLock(async () => {
-    const state = await deps.loadState();
-    if (!state.private) {
-      await deps.log({ event: "UserPromptSubmit", outcome: "already_public", matched: reason });
-      return;
+  try {
+    await deps.withLock(async () => {
+      const state = await deps.loadState();
+      if (!state.private) {
+        await deps.log({ event: "UserPromptSubmit", outcome: "already_public", matched: reason });
+        return;
+      }
+      await deps.saveState({ ...state, private: false });
+      await deps.log({ event: "UserPromptSubmit", outcome: "exited_private", matched: reason });
+    });
+  } catch (err) {
+    await deps.log({
+      event: "UserPromptSubmit",
+      outcome: "lock_failed_during_exit_private_falling_back",
+      error: String(err?.message ?? err)
+    });
+    try {
+      const state = await deps.loadState();
+      if (state.private) await deps.saveState({ ...state, private: false });
+    } catch {
     }
-    await deps.saveState({ ...state, private: false });
-    await deps.log({ event: "UserPromptSubmit", outcome: "exited_private", matched: reason });
-  });
+  }
 }
 
 // src/handlers/post-compact.mjs
@@ -596,6 +628,9 @@ function parseEndpoint(endpoint) {
   if (url.username || url.password) {
     throw new McpClientError("config", "Librarian endpoint must not embed credentials");
   }
+  if (url.search) {
+    throw new McpClientError("config", "Librarian endpoint must not include a query string");
+  }
   return url;
 }
 function isRecord(value) {
@@ -685,6 +720,7 @@ function buildDeps(payload) {
   let _client = null;
   const getClient = () => {
     if (_client) return _client;
+    if (!dataDir) return null;
     if (!endpoint || !token) return null;
     try {
       _client = createMcpClient({ endpoint, token });
@@ -698,7 +734,11 @@ function buildDeps(payload) {
     payload,
     log: dataDir ? (entry) => log(dataDir, entry) : async () => {
     },
-    loadState: dataDir ? () => loadState(dataDir) : async () => ({}),
+    // When dataDir is missing we still return DEFAULT_STATE (not `{}`) so
+    // handlers reading `state.private` / `state.session_id` see the sane
+    // defaults rather than `undefined` — which would coerce to false/null
+    // anyway but reads worse and trips strict assertions.
+    loadState: dataDir ? () => loadState(dataDir) : async () => ({ ...DEFAULT_STATE }),
     saveState: dataDir ? (state) => saveState(dataDir, state) : async () => {
     },
     withLock: dataDir ? (fn) => withLock(dataDir, fn) : (fn) => fn(),

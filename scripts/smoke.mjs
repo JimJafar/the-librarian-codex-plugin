@@ -260,7 +260,7 @@ function callsSince(from) {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    console.log("\nScenario 6: SessionStart(resume) pauses stale-active then bootstraps");
+    console.log("\nScenario 6: SessionStart(resume) bootstraps first then pauses stale-active");
     {
       const dir = freshTmp();
       staleActive = ["ses_oldsmoke-active"];
@@ -271,9 +271,9 @@ function callsSince(from) {
       );
       const calls = callsSince(from);
       const seq = calls.map((c) => c.tool);
-      assert(JSON.stringify(seq) === JSON.stringify(["list_sessions", "pause_session", "start_session"]),
-        `expected list_sessions → pause_session → start_session, got ${JSON.stringify(seq)}`);
-      assert(calls[1].args.session_id === "ses_oldsmoke-active", "paused the stale active");
+      assert(JSON.stringify(seq) === JSON.stringify(["start_session", "list_sessions", "pause_session"]),
+        `expected start_session → list_sessions → pause_session, got ${JSON.stringify(seq)}`);
+      assert(calls[2].args.session_id === "ses_oldsmoke-active", "paused the stale active");
       staleActive = []; // reset
     }
 

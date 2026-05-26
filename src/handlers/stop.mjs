@@ -30,6 +30,12 @@ export async function handleStop(payload, deps) {
   }
 
   const summary = deriveTurnSummary(payload);
+  // Acceptable race: `state.session_id` was read above without the lock. If
+  // a concurrent UserPromptSubmit `goPrivate` slipped in between this read
+  // and the network call, one last event records to the (now ended)
+  // session. The alternative — holding the lock across a 15 s HTTP POST —
+  // would block every other hook for that duration. Trade-off favours
+  // responsiveness.
   try {
     await client.callTool("record_session_event", {
       session_id: state.session_id,
