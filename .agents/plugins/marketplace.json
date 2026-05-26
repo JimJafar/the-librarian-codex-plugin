@@ -1,0 +1,20 @@
+{
+  "name": "the-librarian-codex-local",
+  "interface": {
+    "displayName": "The Librarian (local source)"
+  },
+  "plugins": [
+    {
+      "name": "the-librarian",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "NONE"
+      },
+      "category": "Engineering"
+    }
+  ]
+}
