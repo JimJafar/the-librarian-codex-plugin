@@ -1,7 +1,7 @@
 {
-  "source_sha": "44c00c224151a2e8f859fd78925814686eadf5af",
+  "source_sha": "17fc752a880c62f06190c4bc7260810130afacd2",
   "esbuild_version": "0.24.2",
-  "built_at": "2026-05-26T13:03:44.027Z",
+  "built_at": "2026-05-26T13:05:40.981Z",
   "entry": "src/dispatch.mjs",
   "outfile": "bin/librarian-codex-hook.js"
 }

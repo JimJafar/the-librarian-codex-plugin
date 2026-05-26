@@ -97,10 +97,129 @@ async function handleSessionStart(payload, deps) {
   return {};
 }
 
+// src/privacy-detector.mjs
+var DEFAULT_PRIVATE_MARKERS = Object.freeze([
+  "this is a private session",
+  "don't remember this",
+  "do not remember this",
+  "don't save this",
+  "do not save this",
+  "don't store this",
+  "off the record",
+  "keep this between us",
+  "private from here"
+]);
+var DEFAULT_PUBLIC_MARKERS = Object.freeze([
+  "you can remember again",
+  "end private mode",
+  "back on the record",
+  "this can be remembered"
+]);
+var TOGGLE_COMMANDS = Object.freeze(["/lib-toggle-private", "/lib:toggle-private"]);
+var SUBSTANTIVE_MIN_CHARS = 3;
+var NON_ALNUM_GLOBAL = /[^a-z0-9]+/g;
+function normalise(text) {
+  return (text ?? "").normalize("NFKC").replace(/[‘’]/g, "'").toLowerCase();
+}
+function hasSubstantiveRemainder(normalisedPrompt, normalisedMarker) {
+  const idx = normalisedPrompt.indexOf(normalisedMarker);
+  const without = idx === -1 ? normalisedPrompt : `${normalisedPrompt.slice(0, idx)} ${normalisedPrompt.slice(idx + normalisedMarker.length)}`;
+  return without.replace(NON_ALNUM_GLOBAL, "").length >= SUBSTANTIVE_MIN_CHARS;
+}
+function firstMatch(normalisedPrompt, markers) {
+  for (const marker of markers) {
+    if (normalisedPrompt.includes(normalise(marker))) return marker;
+  }
+  return null;
+}
+function detectPrivacySignal(prompt, { privateMarkers, publicMarkers } = {}) {
+  const normalised = normalise(prompt);
+  const trimmed = normalised.trim();
+  if (TOGGLE_COMMANDS.includes(trimmed)) {
+    return { signal: "toggle", matched: trimmed, hasSubstantiveContent: false };
+  }
+  const privates = privateMarkers ?? DEFAULT_PRIVATE_MARKERS;
+  const enter = firstMatch(normalised, privates);
+  if (enter !== null) {
+    return {
+      signal: "enter-private",
+      matched: enter,
+      hasSubstantiveContent: hasSubstantiveRemainder(normalised, normalise(enter))
+    };
+  }
+  const publics = publicMarkers ?? DEFAULT_PUBLIC_MARKERS;
+  const exit = firstMatch(normalised, publics);
+  if (exit !== null) {
+    return {
+      signal: "exit-private",
+      matched: exit,
+      hasSubstantiveContent: hasSubstantiveRemainder(normalised, normalise(exit))
+    };
+  }
+  return { signal: "none", matched: null, hasSubstantiveContent: false };
+}
+
 // src/handlers/user-prompt-submit.mjs
 async function handleUserPromptSubmit(payload, deps) {
-  await deps.log({ event: "UserPromptSubmit", prompt_len: (payload?.prompt ?? "").length });
+  const prompt = payload?.prompt ?? "";
+  await deps.log({ event: "UserPromptSubmit", prompt_len: prompt.length });
+  const signal = detectPrivacySignal(prompt);
+  if (signal.signal === "enter-private" || signal.signal === "toggle") {
+    await applyEnterPrivate(deps, signal);
+    return {};
+  }
+  if (signal.signal === "exit-private") {
+    await applyExitPrivate(deps, signal);
+    return {};
+  }
+  await bootstrapSession(payload, deps).catch(async (err) => {
+    await deps.log({ event: "UserPromptSubmit", outcome: "bootstrap_threw", error: String(err?.message ?? err) });
+  });
   return {};
+}
+async function applyEnterPrivate(deps, signal) {
+  await deps.withLock(async () => {
+    const state = await deps.loadState();
+    if (signal.signal === "toggle" && state.private) {
+      await deps.saveState({ ...state, private: false });
+      await deps.log({ event: "UserPromptSubmit", outcome: "exited_private_via_toggle" });
+      return;
+    }
+    if (state.private) {
+      await deps.log({ event: "UserPromptSubmit", outcome: "already_private" });
+      return;
+    }
+    if (state.session_id) {
+      const client = deps.getClient();
+      if (client) {
+        try {
+          await client.callTool("end_session", {
+            session_id: state.session_id,
+            summary: "switching to private mode"
+          });
+        } catch (err) {
+          await deps.log({
+            event: "UserPromptSubmit",
+            outcome: "end_session_failed_during_enter_private",
+            error: String(err?.message ?? err)
+          });
+        }
+      }
+    }
+    await deps.saveState({ ...state, session_id: null, source_ref: null, private: true });
+    await deps.log({ event: "UserPromptSubmit", outcome: "entered_private", matched: signal.matched });
+  });
+}
+async function applyExitPrivate(deps, signal) {
+  await deps.withLock(async () => {
+    const state = await deps.loadState();
+    if (!state.private) {
+      await deps.log({ event: "UserPromptSubmit", outcome: "already_public", matched: signal.matched });
+      return;
+    }
+    await deps.saveState({ ...state, private: false });
+    await deps.log({ event: "UserPromptSubmit", outcome: "exited_private", matched: signal.matched });
+  });
 }
 
 // src/handlers/post-compact.mjs
