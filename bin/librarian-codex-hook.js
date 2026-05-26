@@ -1,8 +1,99 @@
 #!/usr/bin/env node
 
+// src/source-ref.mjs
+import path from "node:path";
+function buildSourceRef({ cwd, runId }) {
+  const absCwd = path.resolve(cwd || process.cwd());
+  if (typeof runId === "string" && runId.length > 0) {
+    return `codex:run:${runId}:cwd:${absCwd}`;
+  }
+  return `cwd:${absCwd}`;
+}
+function sourceRefFromPayload(payload, env = process.env) {
+  return buildSourceRef({
+    cwd: payload?.cwd,
+    runId: env.CODEX_RUN_ID
+  });
+}
+
+// src/mcp-parse.mjs
+var ID_RE = /^ID:\s*(ses_[A-Za-z0-9-]+)/m;
+function extractSessionId(text) {
+  const m = (text ?? "").match(ID_RE);
+  return m ? m[1] : null;
+}
+
+// src/handlers/session-bootstrap.mjs
+var HARNESS = "codex";
+async function bootstrapSession(payload, deps) {
+  return deps.withLock(async () => {
+    const state = await deps.loadState();
+    if (state.private) {
+      await deps.log({ event: "bootstrap", outcome: "skipped_private" });
+      return state;
+    }
+    if (state.session_id) {
+      await deps.log({ event: "bootstrap", outcome: "already_attached", session_id: state.session_id });
+      return state;
+    }
+    const client = deps.getClient();
+    if (!client) {
+      await deps.log({ event: "bootstrap", outcome: "no_client" });
+      return state;
+    }
+    const sourceRef = sourceRefFromPayload(payload, deps.env);
+    const args = {
+      harness: HARNESS,
+      source_ref: sourceRef,
+      cwd: payload?.cwd ?? deps.env.PWD ?? null,
+      visibility: "common",
+      capture_mode: "summary",
+      start_summary: deriveStartSummary(payload)
+    };
+    if (deps.env.LIBRARIAN_PROJECT_KEY) args.project_key = deps.env.LIBRARIAN_PROJECT_KEY;
+    let sessionId = null;
+    try {
+      const text = await client.callTool("start_session", args);
+      sessionId = extractSessionId(text);
+    } catch (err) {
+      await deps.log({ event: "bootstrap", outcome: "start_failed", error: String(err?.message ?? err) });
+      return state;
+    }
+    if (!sessionId) {
+      await deps.log({ event: "bootstrap", outcome: "no_session_id_in_response" });
+      return state;
+    }
+    const updated = {
+      ...state,
+      session_id: sessionId,
+      source_ref: sourceRef,
+      last_checkpoint_at: deps.now(),
+      turns_since_checkpoint: 0
+    };
+    await deps.saveState(updated);
+    await deps.log({ event: "bootstrap", outcome: "started", session_id: sessionId, source_ref: sourceRef });
+    return updated;
+  });
+}
+function deriveStartSummary(payload) {
+  const parts = [];
+  if (payload?.cwd) parts.push(`Working in ${payload.cwd}.`);
+  const prompt = (payload?.prompt ?? "").trim();
+  if (prompt) {
+    const seed = prompt.length > 240 ? `${prompt.slice(0, 240)}\u2026` : prompt;
+    parts.push(`Opening prompt: ${seed}`);
+  }
+  if (parts.length === 0) return "Session opened from Codex with no visible context yet.";
+  return parts.join(" ");
+}
+
 // src/handlers/session-start.mjs
 async function handleSessionStart(payload, deps) {
-  await deps.log({ event: "SessionStart", source: payload?.source ?? null });
+  const source = payload?.source ?? null;
+  await deps.log({ event: "SessionStart", source });
+  if (source === "startup" || source === "compact" || source == null) {
+    await bootstrapSession(payload, deps);
+  }
   return {};
 }
 
@@ -26,20 +117,20 @@ async function handleStop(payload, deps) {
 
 // src/log.mjs
 import fs from "node:fs";
-import path from "node:path";
+import path2 from "node:path";
 var LOG_FILENAME = "log.jsonl";
 async function log(dataDir, entry) {
   try {
     await fs.promises.mkdir(dataDir, { recursive: true });
     const line = JSON.stringify({ ts: (/* @__PURE__ */ new Date()).toISOString(), ...entry }) + "\n";
-    await fs.promises.appendFile(path.join(dataDir, LOG_FILENAME), line, "utf8");
+    await fs.promises.appendFile(path2.join(dataDir, LOG_FILENAME), line, "utf8");
   } catch {
   }
 }
 
 // src/state-store.mjs
 import fs2 from "node:fs";
-import path2 from "node:path";
+import path3 from "node:path";
 var STATE_FILENAME = "state.json";
 var LOCK_FILENAME = "state.json.lock";
 var DEFAULT_STATE = Object.freeze({
@@ -55,10 +146,10 @@ var DEFAULT_STATE = Object.freeze({
   // canonical source_ref the session was started against
 });
 function statePath(dataDir) {
-  return path2.join(dataDir, STATE_FILENAME);
+  return path3.join(dataDir, STATE_FILENAME);
 }
 function lockPath(dataDir) {
-  return path2.join(dataDir, LOCK_FILENAME);
+  return path3.join(dataDir, LOCK_FILENAME);
 }
 async function loadState(dataDir) {
   await fs2.promises.mkdir(dataDir, { recursive: true });
