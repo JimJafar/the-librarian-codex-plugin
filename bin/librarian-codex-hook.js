@@ -17,7 +17,7 @@ function sourceRefFromPayload(payload, env = process.env) {
 }
 
 // src/mcp-parse.mjs
-var ID_RE = /^ID:\s*(ses_[A-Za-z0-9-]+)/m;
+var ID_RE = /^ID:\s*(ses_[A-Za-z0-9_-]+)/m;
 function extractSessionId(text) {
   const m = (text ?? "").match(ID_RE);
   return m ? m[1] : null;
@@ -32,7 +32,7 @@ function parseSessionList(text) {
       pending = { status: head[1].trim(), title: head[2].trim() };
       continue;
     }
-    const idLine = line.match(/^\s*id:\s*(ses_[A-Za-z0-9-]+)/);
+    const idLine = line.match(/^\s*id:\s*(ses_[A-Za-z0-9_-]+)/);
     if (idLine && pending) {
       sessions.push({ id: idLine[1], ...pending });
       pending = null;

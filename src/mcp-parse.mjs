@@ -4,7 +4,7 @@
 // grep canonical lines out of it. Match shape is from the server's actual
 // output: `ID: ses_…`, `Status: active`, etc.
 
-const ID_RE = /^ID:\s*(ses_[A-Za-z0-9-]+)/m;
+const ID_RE = /^ID:\s*(ses_[A-Za-z0-9_-]+)/m;
 const STATUS_RE = /^Status:\s*(\w+)/m;
 
 export function extractSessionId(text) {
@@ -30,7 +30,7 @@ export function parseSessionList(text) {
       pending = { status: head[1].trim(), title: head[2].trim() };
       continue;
     }
-    const idLine = line.match(/^\s*id:\s*(ses_[A-Za-z0-9-]+)/);
+    const idLine = line.match(/^\s*id:\s*(ses_[A-Za-z0-9_-]+)/);
     if (idLine && pending) {
       sessions.push({ id: idLine[1], ...pending });
       pending = null;
