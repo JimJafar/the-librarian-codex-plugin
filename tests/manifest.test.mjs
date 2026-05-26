@@ -80,3 +80,20 @@ test("the @librarian skill exists with non-empty SKILL.md", () => {
   const body = fs.readFileSync(skillPath, "utf8");
   assert.ok(body.trim().length > 0, "SKILL.md must not be empty");
 });
+
+test("@librarian SKILL.md stays within the 120-line budget and covers the required sections", () => {
+  const body = fs.readFileSync(path.join(repoRoot, "skills/librarian/SKILL.md"), "utf8");
+  const lines = body.split("\n").length;
+  assert.ok(lines <= 120, `SKILL.md is ${lines} lines — budget is 120 (per PLAN.md Q5)`);
+  // YAML frontmatter required so Codex's skill loader picks up the name + description
+  assert.match(body, /^---\nname: librarian\n/, "SKILL.md must start with name=librarian frontmatter");
+  assert.match(body, /description:/, "frontmatter must include a description");
+  // Three required sections: verb table, memory tools, invariants
+  assert.match(body, /Canonical verbs/i, "must document the canonical verbs");
+  assert.match(body, /Memory tools/i, "must document the memory tools");
+  assert.match(body, /Invariants/i, "must document the invariants (verify-after-recall, privacy, capture mode)");
+  // Specific invariants the system depends on
+  assert.match(body, /verify_memory/, "must teach verify-after-recall");
+  assert.match(body, /off the record/i, "must reference the privacy markers");
+  assert.match(body, /capture_mode/, "must document capture_mode default");
+});
