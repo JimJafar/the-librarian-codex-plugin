@@ -43,12 +43,91 @@ test("a non-marker prompt triggers a bootstrap when none is attached", async () 
   const dir = tmp("bootstrap-fresh");
   const deps = makeDeps(dir);
   const result = await handleUserPromptSubmit({ prompt: "hello world", cwd: "/p" }, deps);
+  // Default stub returns start_session text for ALL calls — conv_state_get
+  // parses that as JSON-error → no block prepended → `{}`. So the result
+  // shape is identical to pre-injection.
   assert.deepEqual(result, {});
   const calls = deps._client.calls;
-  assert.equal(calls.length, 1);
+  // Two calls now: start_session (bootstrap) then conv_state_get (inject).
+  assert.equal(calls.length, 2);
   assert.equal(calls[0].name, "start_session");
+  assert.equal(calls[1].name, "conv_state_get");
   const state = await loadState(dir);
   assert.equal(state.session_id, "ses_x");
+});
+
+// Conv-state injection — spec §4.9 of memory-domain-isolation.
+
+const CONV_STATE_JSON = JSON.stringify({
+  conv_id: "codex:run:r1:cwd:/p",
+  harness: "codex",
+  domain: "coding",
+  session_id: "ses_attached",
+  off_record: false,
+  created_at: "2026-05-27T00:00:00.000Z",
+  updated_at: "2026-05-27T00:00:00.000Z",
+});
+
+test("conv_state_get hit prepends the canonical block to additionalContext", async () => {
+  const dir = tmp("inject-hit");
+  const client = {
+    calls: [],
+    callTool: async (name, args) => {
+      client.calls.push({ name, args });
+      if (name === "conv_state_get") return CONV_STATE_JSON;
+      return "Session started.\nID: ses_x\nStatus: active\n";
+    },
+  };
+  const deps = makeDeps(dir, { client });
+  const result = await handleUserPromptSubmit({ prompt: "hello", cwd: "/p" }, deps);
+  assert.equal(result.hookSpecificOutput?.hookEventName, "UserPromptSubmit");
+  const ctx = result.hookSpecificOutput?.additionalContext;
+  assert.ok(ctx?.startsWith("<conversation-state>"), `missing block: ${ctx}`);
+  assert.ok(ctx.includes("conv_id: codex:run:r1:cwd:/p"));
+  assert.ok(ctx.includes("domain: coding"));
+  assert.ok(ctx.includes("session_id: ses_attached"));
+  assert.ok(ctx.includes("off_record: false"));
+  const convCall = client.calls.find((c) => c.name === "conv_state_get");
+  assert.equal(convCall.args.conv_id, "codex:run:r1:cwd:/p");
+});
+
+test("conv_state_get miss (no state) returns plain {} — no envelope", async () => {
+  const dir = tmp("inject-miss");
+  const client = {
+    calls: [],
+    callTool: async (name) => {
+      client.calls.push({ name });
+      if (name === "conv_state_get") return "No conversation state for conv_id codex:run:r1:cwd:/p.";
+      return "Session started.\nID: ses_x\nStatus: active\n";
+    },
+  };
+  const deps = makeDeps(dir, { client });
+  const result = await handleUserPromptSubmit({ prompt: "hello", cwd: "/p" }, deps);
+  assert.deepEqual(result, {});
+});
+
+test("conv_state_get failure is fail-soft — the turn proceeds", async () => {
+  const dir = tmp("inject-fail");
+  const client = {
+    calls: [],
+    callTool: async (name, args) => {
+      client.calls.push({ name });
+      if (name === "conv_state_get") throw new Error("server down");
+      return "Session started.\nID: ses_x\nStatus: active\n";
+    },
+  };
+  const deps = makeDeps(dir, { client });
+  const result = await handleUserPromptSubmit({ prompt: "hello", cwd: "/p" }, deps);
+  assert.deepEqual(result, {});
+});
+
+test("no MCP client → no conv-state injection, just `{}`", async () => {
+  const dir = tmp("inject-no-client");
+  const deps = makeDeps(dir, { client: makeClient() });
+  // Override the client getter to return null (mimics missing dataDir / env).
+  deps.getClient = () => null;
+  const result = await handleUserPromptSubmit({ prompt: "hello", cwd: "/p" }, deps);
+  assert.deepEqual(result, {});
 });
 
 test("'off the record' ends the attached session and flips state.private", async () => {

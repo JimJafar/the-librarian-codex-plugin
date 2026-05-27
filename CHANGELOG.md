@@ -9,6 +9,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Conv-state injection on every UserPromptSubmit.** Implements
+  spec §4.9 of the upstream memory-domain-isolation rollout. After
+  the existing privacy gate and session bootstrap, the handler now
+  fetches the conv-state row for this Codex run (via the existing
+  MCP client, keyed on `source_ref` since Codex doesn't expose a
+  stable per-conversation id on hook payloads) and returns a
+  `hookSpecificOutput.additionalContext` envelope carrying the
+  canonical `<conversation-state>` block when a row exists. The LLM
+  sees the current `domain` / `session_id` / `off_record` on every
+  turn, defeating context-compaction-driven state loss. House-rule:
+  no MCP call while off-record, fail-soft on every miss / network
+  failure / parse error (AGENTS.md §2). Bundle rebuilt; PROVENANCE
+  updated.
+
 - `AGENTS.md` with the family-wide house rules (privacy, fail-soft,
   cross-repo contracts, CHANGELOG discipline, etc.) and the
   Codex-plugin-specific build / test / gotcha notes. Sibling

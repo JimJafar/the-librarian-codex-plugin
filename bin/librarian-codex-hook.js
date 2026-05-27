@@ -261,8 +261,76 @@ async function handleUserPromptSubmit(payload, deps) {
           error: String(err?.message ?? err)
         });
       });
-      return {};
+      return await injectConvState(payload, deps);
   }
+}
+async function injectConvState(payload, deps) {
+  try {
+    const state = await deps.loadState();
+    if (state?.private) return {};
+    const client = deps.getClient();
+    if (!client) return {};
+    const convId = sourceRefFromPayload(payload, deps.env);
+    if (!convId) return {};
+    let toolResult;
+    try {
+      toolResult = await client.callTool("conv_state_get", { conv_id: convId });
+    } catch (err) {
+      await deps.log({
+        event: "UserPromptSubmit",
+        outcome: "conv_state_lookup_failed",
+        error: String(err?.message ?? err)
+      });
+      return {};
+    }
+    const parsed = parseConvState(toolResult);
+    if (!parsed) return {};
+    return {
+      hookSpecificOutput: {
+        hookEventName: "UserPromptSubmit",
+        additionalContext: renderConvStateBlock(parsed)
+      }
+    };
+  } catch (err) {
+    await deps.log({
+      event: "UserPromptSubmit",
+      outcome: "conv_state_inject_threw",
+      error: String(err?.message ?? err)
+    });
+    return {};
+  }
+}
+function parseConvState(result) {
+  if (!result) return null;
+  let text;
+  if (typeof result === "string") {
+    text = result;
+  } else if (result?.content?.[0]?.text) {
+    text = result.content[0].text;
+  } else if (typeof result?.text === "string") {
+    text = result.text;
+  } else {
+    return null;
+  }
+  if (typeof text !== "string" || text.startsWith("No conversation state")) return null;
+  try {
+    const obj = JSON.parse(text);
+    return obj && typeof obj === "object" && typeof obj.conv_id === "string" ? obj : null;
+  } catch {
+    return null;
+  }
+}
+function renderConvStateBlock(state) {
+  const sessionId = state.session_id ?? "none";
+  const offRecord = state.off_record ? "true" : "false";
+  return [
+    "<conversation-state>",
+    `  conv_id: ${state.conv_id}`,
+    `  domain: ${state.domain}`,
+    `  session_id: ${sessionId}`,
+    `  off_record: ${offRecord}`,
+    "</conversation-state>"
+  ].join("\n");
 }
 async function goPrivate(deps, { reason }) {
   try {
