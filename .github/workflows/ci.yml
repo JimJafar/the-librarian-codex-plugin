@@ -28,9 +28,9 @@ jobs:
         # see .gitignore for why.)
         run: |
           npm run build
-          if ! git diff --quiet bin/librarian-codex-hook.js; then
-            echo "::error::bin/librarian-codex-hook.js is out of date — run 'npm run build' and commit the result"
-            git diff bin/librarian-codex-hook.js
+          if ! git diff --quiet plugins/the-librarian/bin/librarian-codex-hook.js; then
+            echo "::error::plugins/the-librarian/bin/librarian-codex-hook.js is out of date — run 'npm run build' and commit the result"
+            git diff plugins/the-librarian/bin/librarian-codex-hook.js
             exit 1
           fi
       - run: npm run smoke

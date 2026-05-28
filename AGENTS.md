@@ -131,7 +131,7 @@ a worse one.
 npm install
 npm test            # unit tests via node:test
 npm run validate    # manifest + .mcp.json + hooks + bundle shape gate
-npm run build       # esbuild → bin/librarian-codex-hook.js
+npm run build       # esbuild → plugins/the-librarian/bin/librarian-codex-hook.js
 npm run smoke       # mock-Librarian end-to-end across all 4 hook events
 ```
 
@@ -139,10 +139,10 @@ CI runs all four on Node 20 / 22 / 24 plus a bundle-drift check.
 
 ## 4. Gotchas (repo-specific)
 
-- **`bin/librarian-codex-hook.js` IS committed.** Users don't run
-  `npm install` — they execute the bundled file directly. Always
-  rebuild before committing source changes; CI gates this.
-- **`bin/PROVENANCE.json` is NOT committed.** It's a build receipt
+- **`plugins/the-librarian/bin/librarian-codex-hook.js` IS committed.**
+  Users don't run `npm install` — they execute the bundled file directly.
+  Always rebuild before committing source changes; CI gates this.
+- **`plugins/the-librarian/bin/PROVENANCE.json` is NOT committed.** It's a build receipt
   that embeds the current commit SHA and timestamp, so it drifts every
   commit. Gitignored; regenerated locally and by CI.
 - **Hook stdout is protocol.** Don't `console.log` from a handler —

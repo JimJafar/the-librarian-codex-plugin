@@ -8,7 +8,7 @@
 node_modules/
 *.log
 .DS_Store
-bin/PROVENANCE.json
+plugins/the-librarian/bin/PROVENANCE.json
 
 # Autonomous build session notes — never committed
 AUTONOMOUS-BUILD-NOTES-*.md

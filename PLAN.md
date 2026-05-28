@@ -174,7 +174,7 @@ anything against it.
 
 **Verification:**
 - `codex plugin marketplace add file:///Users/jim/code/the-librarian-codex-plugin` succeeds.
-- `codex plugin install the-librarian@the-librarian-codex-local` succeeds.
+- `codex plugin install the-librarian@the-librarian-codex` succeeds.
 - Restart Codex, type `@librarian` — the placeholder skill content surfaces.
 - Inspect `~/.codex/config.toml`: a `[plugins."the-librarian@..."]` entry was added.
 

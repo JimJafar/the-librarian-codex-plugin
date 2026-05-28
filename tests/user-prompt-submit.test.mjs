@@ -7,7 +7,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { handleUserPromptSubmit } from "../src/handlers/user-prompt-submit.mjs";
+import { handleUserPromptSubmit } from "../plugins/the-librarian/src/handlers/user-prompt-submit.mjs";
 
 function makeClient(stub) {
   const calls = [];

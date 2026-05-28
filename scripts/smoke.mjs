@@ -23,10 +23,11 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const bin = path.join(repoRoot, "bin/librarian-codex-hook.js");
+const pluginRoot = path.join(repoRoot, "plugins/the-librarian");
+const bin = path.join(pluginRoot, "bin/librarian-codex-hook.js");
 
 if (!fs.existsSync(bin)) {
-  console.error(`bin/librarian-codex-hook.js missing — run 'npm run build' first.`);
+  console.error(`plugins/the-librarian/bin/librarian-codex-hook.js missing — run 'npm run build' first.`);
   process.exit(1);
 }
 

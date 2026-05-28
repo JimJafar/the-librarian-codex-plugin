@@ -32,7 +32,7 @@ git checkout main && git pull
 
 # 1. Bump the TWO version files in lockstep.
 NEW=<X.Y.Z>
-jq ".version = \"$NEW\"" .codex-plugin/plugin.json > tmp && mv tmp .codex-plugin/plugin.json
+jq ".version = \"$NEW\"" plugins/the-librarian/.codex-plugin/plugin.json > tmp && mv tmp plugins/the-librarian/.codex-plugin/plugin.json
 jq ".version = \"$NEW\"" package.json > tmp && mv tmp package.json
 
 # 2. Move CHANGELOG [Unreleased] entries under [vX.Y.Z] - YYYY-MM-DD.
@@ -53,5 +53,5 @@ gh release create v$NEW --title "v$NEW" --notes-from-tag
 ```
 
 Users pick it up via `codex plugin update the-librarian` — the
-marketplace pulls `.codex-plugin/plugin.json` from the default
-branch on demand.
+marketplace pulls `plugins/the-librarian/.codex-plugin/plugin.json`
+from the default branch on demand.

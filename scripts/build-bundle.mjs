@@ -12,10 +12,11 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const pluginRoot = path.join(repoRoot, "plugins/the-librarian");
 const require = createRequire(import.meta.url);
 
-const entry = path.join(repoRoot, "src/dispatch.mjs");
-const outfile = path.join(repoRoot, "bin/librarian-codex-hook.js");
+const entry = path.join(pluginRoot, "src/dispatch.mjs");
+const outfile = path.join(pluginRoot, "bin/librarian-codex-hook.js");
 
 await build({
   entryPoints: [entry],
@@ -47,6 +48,6 @@ const provenance = {
   entry: path.relative(repoRoot, entry),
   outfile: path.relative(repoRoot, outfile),
 };
-fs.writeFileSync(path.join(repoRoot, "bin/PROVENANCE.json"), JSON.stringify(provenance, null, 2) + "\n", "utf8");
+fs.writeFileSync(path.join(pluginRoot, "bin/PROVENANCE.json"), JSON.stringify(provenance, null, 2) + "\n", "utf8");
 
 console.log(`Built ${path.relative(repoRoot, outfile)} (esbuild ${esbuildVersion}, source ${sourceSha.slice(0, 8)})`);

@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { log, MAX_LOG_BYTES } from "../src/log.mjs";
+import { log, MAX_LOG_BYTES } from "../plugins/the-librarian/src/log.mjs";
 
 function tmp(name) {
   return fs.mkdtempSync(path.join(os.tmpdir(), `librarian-log-${name}-`));
