@@ -7,6 +7,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Marketplace install plumbing aligned with Codex.** Four discoveries
+  while landing the first working install (see
+  [`notes/marketplace-shape.md`](notes/marketplace-shape.md) caveats 3–5):
+  - `policy.authentication` enum is `ON_INSTALL | ON_USE` only — `"NONE"`
+    is rejected. Now ships `"ON_INSTALL"`.
+  - Marketplace name + display: `the-librarian-codex-local` →
+    `the-librarian-codex`, displayName → `The Librarian`.
+  - Plugin must live in a subdirectory — moved from repo root into
+    `plugins/the-librarian/` to match the bundled OpenAI convention.
+  - Codex's `.mcp.json` parser does NOT expand `${VAR}` in URLs, and
+    Librarian endpoints are per-user, so the bundled `.mcp.json` and the
+    `mcpServers` manifest pointer are **removed**. README now documents a
+    one-time `codex mcp add the-librarian --url "$LIBRARIAN_MCP_URL"
+    --bearer-token-env-var LIBRARIAN_AGENT_TOKEN` at install. Codex reads
+    the token from env on every tool call.
+
 ## [0.2.0] — 2026-05-28
 
 ### Added
