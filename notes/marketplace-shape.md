@@ -57,14 +57,16 @@ imply some flatter shapes than what's actually shipped — these are real files.
 | `plugins[].source.url` | ✅ for `url`, `git-subdir` | string | Git remote URL |
 | `plugins[].source.ref` | optional | string | Git ref; defaults to default branch |
 | `plugins[].policy.installation` | ✅ | `"AVAILABLE"` (observed) | Probably `"DEPRECATED"`, `"BETA"` exist too |
-| `plugins[].policy.authentication` | ✅ | `"ON_INSTALL"` (observed) | Probably `"NEVER"`, `"PER_USE"` exist |
+| `plugins[].policy.authentication` | ✅ | `"ON_INSTALL" \| "ON_USE"` | **Confirmed enum** (Codex rejects anything else with `unknown variant`). No `"NONE"`. |
 | `plugins[].category` | ✅ | string | Observed: `"Engineering"`, `"Research"`. We'll use `"Engineering"`. |
 
 ⭐ **For our marketplace.json** we'll populate: `name`, `interface.displayName`,
 plus one `plugins[]` entry with `name`, `source.source = "local"` (for the
 local-source install path) **or** `source.source = "url"` (for the GitHub
 install path), `policy.installation = "AVAILABLE"`, `policy.authentication =
-"NONE"` (no per-install auth — env vars carry the bearer token),
+"ON_INSTALL"` (the enum only accepts `ON_INSTALL` or `ON_USE`; we use
+`ON_INSTALL` to match the bundled plugins even though our token is supplied
+via the `LIBRARIAN_AGENT_TOKEN` env var, not collected by Codex at install),
 `category = "Engineering"`.
 
 ## `.codex-plugin/plugin.json`
@@ -169,11 +171,11 @@ no real example to crib from for those two files).
 2. **Source-type discriminator is the inner `source` field**, not the outer
    key. The docs sometimes write `"source": "local"` flat — that's wrong; the
    shipped marketplace uses `"source": { "source": "local", "path": "…" }`.
-3. **`policy.authentication = "NONE"` is not observed in the bundled
-   marketplace** — both bundled plugins use `"ON_INSTALL"`. We'll use
-   `"NONE"` because our plugin's auth (the `LIBRARIAN_AGENT_TOKEN` env var) is
-   not collected at install time. If Codex rejects this, fall back to
-   `"ON_INSTALL"` and document the token field in the install flow.
+3. **`policy.authentication` enum is `ON_INSTALL | ON_USE` only.** Confirmed
+   2026-05-28 — Codex rejects `"NONE"` with
+   `unknown variant 'NONE', expected 'ON_INSTALL' or 'ON_USE'`. We ship
+   `"ON_INSTALL"` to match the bundled plugins; the actual auth is the
+   `LIBRARIAN_AGENT_TOKEN` env var, not anything Codex collects.
 
 ## Next-task seed
 
