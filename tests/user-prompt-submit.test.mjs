@@ -91,6 +91,33 @@ test("conv_state_get hit prepends the canonical block to additionalContext", asy
   assert.equal(convCall.args.conv_id, "codex:run:r1:cwd:/p");
 });
 
+test("malformed conv_state (missing domain) renders `domain: unknown`, never the literal `undefined`", async () => {
+  const dir = tmp("inject-malformed");
+  const malformed = JSON.stringify({
+    conv_id: "codex:run:r1:cwd:/p",
+    harness: "codex",
+    // `domain` deliberately absent — simulates a backend regression
+    // that drops the field from the wire payload.
+    session_id: "ses_attached",
+    off_record: false,
+    created_at: "2026-05-27T00:00:00.000Z",
+    updated_at: "2026-05-27T00:00:00.000Z",
+  });
+  const client = {
+    calls: [],
+    callTool: async (name) => {
+      client.calls.push({ name });
+      if (name === "conv_state_get") return malformed;
+      return "Session started.\nID: ses_x\nStatus: active\n";
+    },
+  };
+  const deps = makeDeps(dir, { client });
+  const result = await handleUserPromptSubmit({ prompt: "hello", cwd: "/p" }, deps);
+  const ctx = result.hookSpecificOutput?.additionalContext ?? "";
+  assert.ok(ctx.includes("domain: unknown"), `expected "domain: unknown", got: ${ctx}`);
+  assert.ok(!ctx.includes("undefined"), `block must not contain "undefined": ${ctx}`);
+});
+
 test("conv_state_get miss (no state) returns plain {} — no envelope", async () => {
   const dir = tmp("inject-miss");
   const client = {
