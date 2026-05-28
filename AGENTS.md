@@ -130,7 +130,7 @@ a worse one.
 ```sh
 npm install
 npm test            # unit tests via node:test
-npm run validate    # manifest + .mcp.json + hooks + bundle shape gate
+npm run validate    # manifest + hooks + marketplace + bundle shape gate
 npm run build       # esbuild → plugins/the-librarian/bin/librarian-codex-hook.js
 npm run smoke       # mock-Librarian end-to-end across all 4 hook events
 ```

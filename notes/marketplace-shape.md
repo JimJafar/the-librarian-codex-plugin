@@ -118,7 +118,7 @@ From `plugins/latex/.codex-plugin/plugin.json` (most complete example):
 | `license` | optional | string | SPDX identifier or `"Proprietary"` |
 | `keywords[]` | optional | string[] | |
 | `skills` | optional | string | Path to skills dir, e.g. `"./skills/"` |
-| `mcpServers` | optional | string | Path to `.mcp.json` — **not used by bundled examples; per docs** |
+| `mcpServers` | optional | string | Path to bundled `.mcp.json`. **Codex's parser treats URL strings as literals — no `${VAR}` expansion.** For deployments where the URL is per-user, omit this field and have users register via `codex mcp add` (see Caveats). |
 | `hooks` | optional | string | Path to `hooks/hooks.json` — **not used by bundled examples; per docs** |
 | `interface.displayName` | ✅ | string | Plugins UI title |
 | `interface.shortDescription` | ✅ | string | One-liner under title |
@@ -137,12 +137,14 @@ From `plugins/latex/.codex-plugin/plugin.json` (most complete example):
 
 ⭐ **For our plugin.json** we'll populate: `name = "the-librarian"`, `version`,
 `description`, `author`, `homepage`, `repository`, `license = "Apache-2.0"`,
-`keywords`, `skills = "./skills/"`, `mcpServers = "./.mcp.json"` (per docs),
-`hooks = "./hooks/hooks.json"` (per docs), `interface.displayName = "The
-Librarian"`, `shortDescription`, `longDescription`, `developerName = "Jim
-Sangwine"`, `category = "Engineering"`, `capabilities = ["Read", "Write"]` (no
-interactive UI), `defaultPrompt = ["Start a Librarian session and recall what
-we know about the current project."]`.
+`keywords`, `skills = "./skills/"`, `hooks = "./hooks/hooks.json"` (per docs),
+`interface.displayName = "The Librarian"`, `shortDescription`,
+`longDescription`, `developerName = "Jim Sangwine"`,
+`category = "Engineering"`, `capabilities = ["Read", "Write"]` (no
+interactive UI), `defaultPrompt = ["Start a Librarian session and recall
+what we know about the current project."]`. **No `mcpServers`** — see
+Caveat 4 (Codex doesn't expand `${VAR}` in MCP URLs, and Librarian
+endpoints are per-user, so users register via `codex mcp add`).
 
 ## Plugin directory layout (observed)
 
@@ -176,6 +178,20 @@ no real example to crib from for those two files).
    `unknown variant 'NONE', expected 'ON_INSTALL' or 'ON_USE'`. We ship
    `"ON_INSTALL"` to match the bundled plugins; the actual auth is the
    `LIBRARIAN_AGENT_TOKEN` env var, not anything Codex collects.
+4. **Codex's `.mcp.json` parser does NOT expand `${VAR}` in URLs.** Confirmed
+   2026-05-28 — a bundled `.mcp.json` with `url: "${LIBRARIAN_MCP_URL}"`
+   produced `MCP startup failed: ... http/request url is invalid: relative
+   URL without a base` at Codex startup. Per
+   [developers.openai.com/codex/mcp](https://developers.openai.com/codex/mcp),
+   the documented schema is literal `url` + `bearer_token_env_var` (env
+   var **name**, not `${...}` template). Where the URL is per-user (true
+   for Librarian — every deployment is different), do NOT bundle
+   `.mcp.json`; have users register the server once via
+   `codex mcp add <name> --url "$VAR" --bearer-token-env-var TOKEN_VAR`.
+5. **Plugins must live in a subdirectory (`plugins/<name>/`), not at the
+   marketplace root.** Confirmed 2026-05-28 — `path: "./"` and `path: "."`
+   both produced `plugin "<name>" was not found in marketplace`. The
+   bundled OpenAI plugins both use `path: "./plugins/<name>"`.
 
 ## Next-task seed
 

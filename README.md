@@ -24,36 +24,42 @@ It gives Codex:
 ## Install
 
 ```sh
+# 1. Add the marketplace + plugin
 codex plugin marketplace add JimJafar/the-librarian-codex-plugin
 codex plugin add the-librarian@the-librarian-codex
+
+# 2. Set the two environment variables in your shell profile (~/.zshrc, ~/.bashrc, …)
+export LIBRARIAN_MCP_URL="https://librarian.example.com/mcp"
+export LIBRARIAN_AGENT_TOKEN="<your-token>"
+
+# 3. Register the MCP server. Codex's .mcp.json schema doesn't expand
+#    ${VAR} in URLs, so the plugin can't auto-register it — you do it once.
+codex mcp add the-librarian \
+  --url "$LIBRARIAN_MCP_URL" \
+  --bearer-token-env-var LIBRARIAN_AGENT_TOKEN
 ```
 
 After install:
 
-1. Set the two environment variables below in your shell profile.
-2. **Approve the `UserPromptSubmit` hook.** In Codex run `/hooks` and
+1. **Approve the `UserPromptSubmit` hook.** In Codex run `/hooks` and
    approve `UserPromptSubmit`. The hook is hashed and will need re-approval
    after every plugin update.
-3. Restart Codex (or the desktop app).
+2. Restart Codex (or the desktop app).
 
-## Configure (environment variables)
+## Environment variables
 
-Both the MCP tool calls and the conv-state injection hook read the **same
-two** variables, so set them once in your shell profile (`~/.zshrc`,
-`~/.bashrc`, …):
+The hook and the MCP server share the same two variables. The hook reads
+them directly; the MCP server reads `LIBRARIAN_AGENT_TOKEN` itself via
+the `bearer_token_env_var` registration above (the URL is captured as a
+literal at `codex mcp add` time).
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `LIBRARIAN_MCP_URL` | yes | The Librarian HTTP MCP URL, e.g. `https://librarian.example.com/mcp` |
-| `LIBRARIAN_AGENT_TOKEN` | yes | Bearer token for the endpoint (only ever sent in the request header) |
+| `LIBRARIAN_MCP_URL` | yes | The Librarian HTTP MCP URL, e.g. `https://librarian.example.com/mcp`. Read by the hook; passed to `codex mcp add` once at install. |
+| `LIBRARIAN_AGENT_TOKEN` | yes | Bearer token. Read by the hook on every event; read by Codex's MCP client on every tool call. Only ever sent in the request header. |
 | `LIBRARIAN_AGENT_ID` | no | Canonical agent id; omit if the token is agent-bound server-side |
 | `LIBRARIAN_PROJECT_KEY` | no | Default project scope |
 | `CODEX_RUN_ID` | (set by Codex) | When present, included in the conv-state `conv_id` so cross-harness lookups line up |
-
-```sh
-export LIBRARIAN_MCP_URL="https://librarian.example.com/mcp"
-export LIBRARIAN_AGENT_TOKEN="<your-token>"
-```
 
 ## What it does
 

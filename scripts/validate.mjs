@@ -37,8 +37,12 @@ function checkPluginJson() {
   if (m.name && !/^[a-z][a-z0-9-]*$/.test(m.name)) fail(`.codex-plugin/plugin.json: name must be kebab-case`);
   if (m.version && !/^\d+\.\d+\.\d+/.test(m.version)) fail(`.codex-plugin/plugin.json: version must be semver`);
   if (m.skills !== "./skills/") fail(`.codex-plugin/plugin.json: skills must equal './skills/'`);
-  if (m.mcpServers && m.mcpServers !== "./.mcp.json") {
-    fail(`.codex-plugin/plugin.json: mcpServers must equal './.mcp.json'`);
+  if ("mcpServers" in m) {
+    // Codex's .mcp.json parser doesn't expand ${VAR} in URLs, so users
+    // register the MCP server manually via `codex mcp add` (see README).
+    // A stale mcpServers pointer would re-introduce the "relative URL
+    // without a base" startup failure.
+    fail(`.codex-plugin/plugin.json: must NOT declare mcpServers (Codex registers it manually; see README)`);
   }
   if (m.hooks && m.hooks !== "./hooks/hooks.json") {
     fail(`.codex-plugin/plugin.json: hooks must equal './hooks/hooks.json'`);
@@ -51,18 +55,13 @@ function checkPluginJson() {
   }
 }
 
-function checkMcpJson() {
-  const m = readJsonOrFail(".mcp.json");
-  if (!m) return;
-  const srv = m.mcpServers?.["the-librarian"];
-  if (!srv) {
-    fail(`.mcp.json: must register a server named 'the-librarian' (namespaced)`);
-    return;
-  }
-  if (srv.type !== "http") fail(`.mcp.json: server type must be 'http'`);
-  if (srv.url !== "${LIBRARIAN_MCP_URL}") fail(`.mcp.json: url must be \${LIBRARIAN_MCP_URL} (env-templated)`);
-  if (srv.headers?.Authorization !== "Bearer ${LIBRARIAN_AGENT_TOKEN}") {
-    fail(`.mcp.json: Authorization header must be 'Bearer \${LIBRARIAN_AGENT_TOKEN}'`);
+function checkMcpJsonAbsent() {
+  // See checkPluginJson: bundled .mcp.json was retired because Codex's
+  // parser treats ${LIBRARIAN_MCP_URL} as a literal. Guard against
+  // accidentally re-introducing it.
+  const p = path.join(pluginRoot, ".mcp.json");
+  if (fs.existsSync(p)) {
+    fail(`plugins/the-librarian/.mcp.json: must NOT exist (Codex doesn't expand \${VAR} in URLs; users register via 'codex mcp add')`);
   }
 }
 
@@ -162,7 +161,7 @@ function checkBundle() {
 }
 
 checkPluginJson();
-checkMcpJson();
+checkMcpJsonAbsent();
 checkHooksJson();
 checkMarketplaceJson();
 checkSkillMd();

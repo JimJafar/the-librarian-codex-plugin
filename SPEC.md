@@ -43,13 +43,17 @@ plugin gives Claude Code:
 ## Tech stack
 
 - **Codex plugin spec** (May 2026): `.codex-plugin/plugin.json` manifest, `hooks/hooks.json`,
-  plugin-bundled `.mcp.json`, `skills/<name>/SKILL.md`. Codex exposes `CLAUDE_PLUGIN_ROOT`
-  as a compatibility alias for `PLUGIN_ROOT`, so any Claude-plugin script that already
-  uses `${CLAUDE_PLUGIN_ROOT}` is portable.
+  `skills/<name>/SKILL.md`. Codex exposes `CLAUDE_PLUGIN_ROOT` as a compatibility alias
+  for `PLUGIN_ROOT`, so any Claude-plugin script that already uses `${CLAUDE_PLUGIN_ROOT}`
+  is portable.
 - **Hook runtime:** Node 20+. Hooks are stdin-JSON / stdout-JSON executables; we bundle
   with esbuild into single files in `bin/` so users don't run `npm install`.
-- **MCP transport:** HTTP via Codex's native `.mcp.json` (`type: "http"`), pointing at
-  the user's `${LIBRARIAN_MCP_URL}` with `Authorization: Bearer ${LIBRARIAN_AGENT_TOKEN}`.
+- **MCP transport:** HTTP via Codex's native `mcp_servers` config. Codex's `.mcp.json`
+  parser doesn't expand `${VAR}` in URLs (it treats them as literal strings, producing
+  "relative URL without a base" at startup), so the plugin does **not** ship a bundled
+  `.mcp.json`. Users register the server once at install time:
+  `codex mcp add the-librarian --url "$LIBRARIAN_MCP_URL" --bearer-token-env-var LIBRARIAN_AGENT_TOKEN`.
+  Codex then reads the bearer token from env on every tool call.
 - **No Python.** Codex hooks are language-agnostic; Node mirrors the Claude plugin
   and lets us lift large chunks of `bin/librarian-claude-hook.js` verbatim.
 
@@ -83,8 +87,7 @@ the-librarian-codex-plugin/
 ├── plugins/
 │   └── the-librarian/                  # Plugin runtime — what PLUGIN_ROOT resolves to at install
 │       ├── .codex-plugin/
-│       │   └── plugin.json             # Codex manifest (name, version, skills, hooks, mcpServers pointers)
-│       ├── .mcp.json                   # MCP server: the-librarian → ${LIBRARIAN_MCP_URL}
+│       │   └── plugin.json             # Codex manifest (name, version, skills, hooks). NO mcpServers — see Integration notes.
 │       ├── hooks/
 │       │   └── hooks.json              # UserPromptSubmit → scripts/dispatch.sh
 │       ├── skills/
@@ -201,8 +204,9 @@ export async function handleUserPromptSubmit(payload) {
 - Log raw user prompts to disk or send them as `record_session_event` payloads while
   off-record.
 - Bypass or disable the privacy gate.
-- Commit secrets (tokens, endpoints) — `LIBRARIAN_AGENT_TOKEN` lives in the user's shell
-  profile and is templated into `.mcp.json` via `${...}` syntax.
+- Commit secrets (tokens, endpoints) — `LIBRARIAN_AGENT_TOKEN` lives in the user's
+  shell profile and is referenced by name (`bearer_token_env_var`) at `codex mcp add`
+  time; Codex reads the value itself on every tool call.
 - Force-push to `main` / `master`.
 
 ## Success criteria
