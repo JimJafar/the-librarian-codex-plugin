@@ -127,13 +127,21 @@ function parseConvState(result) {
 }
 
 // Byte-identical with the family-wide canonical block (spec §4.9).
+//
+// `domain` is required on the wire — the backend enforces
+// `z.string().min(1)` and the SQLite column is `TEXT NOT NULL DEFAULT
+// 'general'`. The `?? "unknown"` fallback is defensive: without it, a
+// malformed payload would render the literal string "undefined" via
+// JS template-literal coercion, and the model would read that as
+// fact. Lockstep with the four other plugin renderers per AGENTS.md.
 function renderConvStateBlock(state) {
+  const domain = state.domain ?? "unknown";
   const sessionId = state.session_id ?? "none";
   const offRecord = state.off_record ? "true" : "false";
   return [
     "<conversation-state>",
     `  conv_id: ${state.conv_id}`,
-    `  domain: ${state.domain}`,
+    `  domain: ${domain}`,
     `  session_id: ${sessionId}`,
     `  off_record: ${offRecord}`,
     "</conversation-state>",
