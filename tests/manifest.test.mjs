@@ -88,12 +88,19 @@ test("@librarian SKILL.md stays within the 120-line budget and covers the requir
   // YAML frontmatter required so Codex's skill loader picks up the name + description
   assert.match(body, /^---\nname: librarian\n/, "SKILL.md must start with name=librarian frontmatter");
   assert.match(body, /description:/, "frontmatter must include a description");
-  // Three required sections: verb table, memory tools, invariants
-  assert.match(body, /Canonical verbs/i, "must document the canonical verbs");
+  // sessions-rethink PR 3 — the four user-facing verbs replace the
+  // old `/lib:session` family. The skill must teach each one.
+  for (const verb of ["/handoff", "/takeover", "/learn", "/toggle-private"]) {
+    assert.match(body, new RegExp(verb.replace("/", "\\/")), `must document the ${verb} verb`);
+  }
+  // Memory tools + invariants still required
   assert.match(body, /Memory tools/i, "must document the memory tools");
-  assert.match(body, /Invariants/i, "must document the invariants (verify-after-recall, privacy, capture mode)");
+  assert.match(body, /Invariants/i, "must document the invariants (verify-after-recall, private mode)");
   // Specific invariants the system depends on
   assert.match(body, /verify_memory/, "must teach verify-after-recall");
-  assert.match(body, /off the record/i, "must reference the privacy markers");
-  assert.match(body, /capture_mode/, "must document capture_mode default");
+  assert.match(
+    body,
+    /\[librarian:private=on\|off\]|private mode/i,
+    "must document the in-conversation private marker",
+  );
 });

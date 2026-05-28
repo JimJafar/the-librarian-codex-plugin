@@ -68,16 +68,22 @@ function checkMcpJson() {
 function checkHooksJson() {
   const m = readJsonOrFail("hooks/hooks.json");
   if (!m) return;
-  const required = ["SessionStart", "UserPromptSubmit", "PostCompact", "Stop"];
-  for (const event of required) {
-    const list = m.hooks?.[event];
-    if (!Array.isArray(list) || list.length === 0) {
-      fail(`hooks/hooks.json: missing or empty entry for ${event}`);
-      continue;
-    }
+  // sessions-rethink PR 3 — only UserPromptSubmit survives. The retired
+  // SessionStart / PostCompact / Stop hooks must NOT be registered (an
+  // operator who already approved them in Codex would still see them
+  // fire; this guard catches stale config drift).
+  const list = m.hooks?.UserPromptSubmit;
+  if (!Array.isArray(list) || list.length === 0) {
+    fail(`hooks/hooks.json: missing or empty entry for UserPromptSubmit`);
+  } else {
     const cmd = list[0]?.hooks?.[0]?.command ?? "";
     if (!cmd.endsWith("/scripts/dispatch.sh")) {
-      fail(`hooks/hooks.json: ${event} must dispatch to scripts/dispatch.sh (got '${cmd}')`);
+      fail(`hooks/hooks.json: UserPromptSubmit must dispatch to scripts/dispatch.sh (got '${cmd}')`);
+    }
+  }
+  for (const retired of ["SessionStart", "PostCompact", "Stop"]) {
+    if (m.hooks?.[retired]) {
+      fail(`hooks/hooks.json: retired ${retired} hook is still registered`);
     }
   }
 }
