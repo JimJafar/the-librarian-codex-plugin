@@ -170,24 +170,32 @@ function callsSince(from) {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    console.log("\nScenario 2: UserPromptSubmit on existing session is a no-op for MCP");
+    console.log(
+      "\nScenario 2: UserPromptSubmit on existing session makes exactly one MCP call (conv_state_get for §4.9 injection)",
+    );
     {
       const dir = freshTmp();
       // Pre-seed state with an attached session.
-      fs.writeFileSync(path.join(dir, "state.json"), JSON.stringify({
-        session_id: "ses_preset",
-        source_ref: "cwd:/proj",
-        private: false,
-        last_checkpoint_at: 1000,
-        turns_since_checkpoint: 0,
-      }));
+      fs.writeFileSync(
+        path.join(dir, "state.json"),
+        JSON.stringify({
+          session_id: "ses_preset",
+          source_ref: "cwd:/proj",
+          private: false,
+          last_checkpoint_at: 1000,
+          turns_since_checkpoint: 0,
+        }),
+      );
       const from = snapshotCalls();
       await runHook(
         { hook_event_name: "UserPromptSubmit", prompt: "what's next", cwd: "/proj" },
         { ...baseEnv, PLUGIN_DATA: dir },
       );
       const calls = callsSince(from);
-      assert(calls.length === 0, "no MCP calls when already attached + non-marker prompt");
+      // Section §4.9 conv-state injection makes one read-only MCP
+      // call per turn (`conv_state_get`); no session/memory writes.
+      const writeCalls = calls.filter((c) => c.tool !== "conv_state_get");
+      assert(writeCalls.length === 0, "no MCP write calls when already attached + non-marker prompt");
     }
 
     // ─────────────────────────────────────────────────────────────────────
