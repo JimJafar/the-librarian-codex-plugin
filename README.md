@@ -25,7 +25,7 @@ It gives Codex:
 
 ```sh
 codex plugin marketplace add JimJafar/the-librarian-codex-plugin
-codex plugin install the-librarian@the-librarian-codex-local
+codex plugin add the-librarian@the-librarian-codex-local
 ```
 
 After install:
