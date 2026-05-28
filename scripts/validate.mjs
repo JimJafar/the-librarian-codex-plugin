@@ -13,15 +13,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const pluginRoot = path.join(repoRoot, "plugins/the-librarian");
 const errors = [];
 
 function fail(msg) {
   errors.push(msg);
 }
 
-function readJsonOrFail(rel) {
+function readJsonOrFail(rel, base = pluginRoot) {
   try {
-    return JSON.parse(fs.readFileSync(path.join(repoRoot, rel), "utf8"));
+    return JSON.parse(fs.readFileSync(path.join(base, rel), "utf8"));
   } catch (err) {
     fail(`${rel}: ${err.code === "ENOENT" ? "missing" : `invalid JSON (${err.message})`}`);
     return null;
@@ -89,7 +90,7 @@ function checkHooksJson() {
 }
 
 function checkMarketplaceJson() {
-  const m = readJsonOrFail(".agents/plugins/marketplace.json");
+  const m = readJsonOrFail(".agents/plugins/marketplace.json", repoRoot);
   if (!m) return;
   if (!m.name) fail(`.agents/plugins/marketplace.json: missing 'name'`);
   if (!Array.isArray(m.plugins) || m.plugins.length === 0) {
@@ -111,7 +112,7 @@ function checkMarketplaceJson() {
 }
 
 function checkSkillMd() {
-  const p = path.join(repoRoot, "skills/librarian/SKILL.md");
+  const p = path.join(pluginRoot, "skills/librarian/SKILL.md");
   if (!fs.existsSync(p)) {
     fail(`skills/librarian/SKILL.md: missing`);
     return;
@@ -124,7 +125,7 @@ function checkSkillMd() {
 }
 
 function checkBundle() {
-  const bin = path.join(repoRoot, "bin/librarian-codex-hook.js");
+  const bin = path.join(pluginRoot, "bin/librarian-codex-hook.js");
   if (!fs.existsSync(bin)) {
     fail(`bin/librarian-codex-hook.js: missing — run 'npm run build'`);
     return;

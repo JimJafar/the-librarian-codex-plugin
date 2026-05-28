@@ -12,7 +12,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createMcpClient, McpClientError } from "../src/mcp-client.mjs";
+import { createMcpClient, McpClientError } from "../plugins/the-librarian/src/mcp-client.mjs";
 
 function fakeTransport(handler) {
   // Returns a transport function that records the calls and lets the test

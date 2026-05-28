@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { dispatch } from "../src/dispatch.mjs";
+import { dispatch } from "../plugins/the-librarian/src/dispatch.mjs";
 
 function withTmpDataDir(name, fn) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `librarian-codex-disp-${name}-`));

@@ -4,7 +4,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildSourceRef, sourceRefFromPayload } from "../src/source-ref.mjs";
+import { buildSourceRef, sourceRefFromPayload } from "../plugins/the-librarian/src/source-ref.mjs";
 
 test("buildSourceRef prefers the codex:run:… form when CODEX_RUN_ID is set", () => {
   const ref = buildSourceRef({ cwd: "/Users/jim/code/foo", runId: "abc123" });

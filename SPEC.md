@@ -70,7 +70,7 @@ npm test                # node --test tests/
 
 # Local install for hand-testing in Codex
 codex plugin marketplace add file://$(pwd)
-codex plugin install the-librarian@the-librarian-codex-local
+codex plugin install the-librarian@the-librarian-codex
 ```
 
 No `dev` script — the plugin runs inside Codex, so the iteration loop is
@@ -80,45 +80,47 @@ No `dev` script — the plugin runs inside Codex, so the iteration loop is
 
 ```
 the-librarian-codex-plugin/
-├── .codex-plugin/
-│   └── plugin.json                  # Codex manifest (name, version, skills, hooks, mcpServers pointers)
-├── .mcp.json                        # MCP server: the-librarian → ${LIBRARIAN_MCP_URL}
-├── hooks/
-│   └── hooks.json                   # SessionStart / UserPromptSubmit / Stop / PostCompact → dispatch.sh
-├── skills/
-│   └── librarian/
-│       └── SKILL.md                 # Umbrella skill: how to drive the 8 MCP tools + privacy
-├── scripts/
-│   ├── dispatch.sh                  # Reads stdin, sets env, exec's node bin/librarian-codex-hook.js
-│   ├── build-bundle.mjs             # esbuild config
-│   ├── validate.mjs                 # manifest + hooks + marketplace shape checks
-│   └── smoke.mjs                    # mock-Librarian end-to-end smoke
-├── bin/
-│   ├── librarian-codex-hook.js      # Bundled dispatcher (event-name → handler)
-│   ├── librarian-mcp-call.js        # Bundled MCP HTTP caller (lifted from Claude plugin)
-│   └── PROVENANCE.json              # Source SHA, build date, esbuild version
-├── src/                             # Pre-bundle sources (event handlers, privacy detector, source_ref builder)
-│   ├── handlers/
-│   │   ├── session-start.mjs
-│   │   ├── user-prompt-submit.mjs
-│   │   ├── stop.mjs
-│   │   └── post-compact.mjs
-│   ├── privacy-detector.mjs         # Ported from hermes-plugin/privacy.py
-│   ├── source-ref.mjs               # codex:run:{id}:cwd:{abs} | cwd:{abs}
-│   └── state-store.mjs              # ${PLUGIN_DATA}/state.json — attached session_id, private flag
+├── plugins/
+│   └── the-librarian/                  # Plugin runtime — what PLUGIN_ROOT resolves to at install
+│       ├── .codex-plugin/
+│       │   └── plugin.json             # Codex manifest (name, version, skills, hooks, mcpServers pointers)
+│       ├── .mcp.json                   # MCP server: the-librarian → ${LIBRARIAN_MCP_URL}
+│       ├── hooks/
+│       │   └── hooks.json              # UserPromptSubmit → scripts/dispatch.sh
+│       ├── skills/
+│       │   └── librarian/
+│       │       └── SKILL.md            # Umbrella skill: how to drive the memory + handoff tools + privacy
+│       ├── scripts/
+│       │   └── dispatch.sh             # Reads stdin, sets env, exec's node bin/librarian-codex-hook.js
+│       ├── bin/
+│       │   ├── librarian-codex-hook.js # Bundled dispatcher (event-name → handler)
+│       │   └── PROVENANCE.json         # Source SHA, build date, esbuild version (not committed)
+│       └── src/                        # Pre-bundle sources (handlers, source_ref builder, log)
+│           ├── handlers/
+│           │   └── user-prompt-submit.mjs
+│           ├── dispatch.mjs
+│           ├── log.mjs
+│           ├── mcp-client.mjs
+│           └── source-ref.mjs
+├── scripts/                            # Dev tooling — not shipped with the plugin
+│   ├── build-bundle.mjs                # esbuild config
+│   ├── validate.mjs                    # manifest + hooks + marketplace shape checks
+│   └── smoke.mjs                       # mock-Librarian end-to-end smoke
 ├── tests/
-│   ├── privacy-detector.test.mjs
-│   ├── source-ref.test.mjs
+│   ├── manifest.test.mjs
 │   ├── dispatch.test.mjs
-│   └── state-store.test.mjs
+│   ├── source-ref.test.mjs
+│   ├── log.test.mjs
+│   ├── mcp-client.test.mjs
+│   └── user-prompt-submit.test.mjs
 ├── .agents/
 │   └── plugins/
-│       └── marketplace.json         # Local marketplace entry (so `codex plugin marketplace add file://$(pwd)` works)
-├── README.md                        # User-facing: install, env vars, what it does
-├── LICENSE                          # Apache-2.0 (match siblings)
-├── package.json                     # ESM, esbuild devDep, test script
+│       └── marketplace.json            # Marketplace catalog (points at plugins/the-librarian)
+├── README.md                           # User-facing: install, env vars, what it does
+├── LICENSE                             # Apache-2.0 (match siblings)
+├── package.json                        # ESM, esbuild devDep, test script
 ├── .gitignore
-└── SPEC.md                          # This file
+└── SPEC.md                             # This file
 ```
 
 ## Code style

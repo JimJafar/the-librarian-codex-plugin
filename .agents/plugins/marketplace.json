@@ -1,14 +1,14 @@
 {
-  "name": "the-librarian-codex-local",
+  "name": "the-librarian-codex",
   "interface": {
-    "displayName": "The Librarian (local source)"
+    "displayName": "The Librarian"
   },
   "plugins": [
     {
       "name": "the-librarian",
       "source": {
         "source": "local",
-        "path": "."
+        "path": "./plugins/the-librarian"
       },
       "policy": {
         "installation": "AVAILABLE",

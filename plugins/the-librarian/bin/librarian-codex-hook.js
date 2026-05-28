@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// src/source-ref.mjs
+// plugins/the-librarian/src/source-ref.mjs
 import path from "node:path";
 function buildSourceRef({ cwd, runId }) {
   const absCwd = path.resolve(cwd || process.cwd());
@@ -16,7 +16,7 @@ function sourceRefFromPayload(payload, env = process.env) {
   });
 }
 
-// src/handlers/user-prompt-submit.mjs
+// plugins/the-librarian/src/handlers/user-prompt-submit.mjs
 async function handleUserPromptSubmit(payload, deps) {
   const prompt = payload?.prompt ?? "";
   await deps.log({ event: "UserPromptSubmit", prompt_len: prompt.length });
@@ -90,7 +90,7 @@ function renderConvStateBlock(state) {
   ].join("\n");
 }
 
-// src/log.mjs
+// plugins/the-librarian/src/log.mjs
 import fs from "node:fs";
 import path2 from "node:path";
 var LOG_FILENAME = "log.jsonl";
@@ -123,7 +123,7 @@ async function rotateIfNeeded(dataDir, file) {
   }
 }
 
-// src/mcp-client.mjs
+// plugins/the-librarian/src/mcp-client.mjs
 var DEFAULT_TIMEOUT_MS = 15e3;
 var DEFAULT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 var McpClientError = class extends Error {
@@ -270,7 +270,7 @@ async function readCapped(response, cap) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-// src/dispatch.mjs
+// plugins/the-librarian/src/dispatch.mjs
 import { pathToFileURL } from "node:url";
 var HANDLERS = {
   UserPromptSubmit: handleUserPromptSubmit
