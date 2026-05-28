@@ -7,6 +7,34 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Sessions rethink — breaking change (sessions-rethink PR 3).** The
+  whole session subsystem is replaced by a four-verb agent surface
+  taught by the SKILL doc. Specifically:
+  - **Removed hooks:** `SessionStart`, `PostCompact`, `Stop` registrations
+    are gone. Only `UserPromptSubmit` survives, and its only job is now
+    conv-state injection (spec §4.9).
+  - **Removed source:** `src/handlers/session-start.mjs`,
+    `session-bootstrap.mjs`, `checkpoint-policy.mjs`, `post-compact.mjs`,
+    `stop.mjs`; `src/state-store.mjs`, `src/privacy-detector.mjs`,
+    `src/mcp-parse.mjs`. The handler-side natural-language private
+    detector (`off the record`, `keep this between us`, …) is retired —
+    private mode is now an in-conversation `[librarian:private=on|off]`
+    marker handled directly by the LLM via `/toggle-private`.
+  - **Removed tests:** the matching unit tests for every deleted module.
+  - **SKILL.md rewritten** to teach four verbs (`/handoff`, `/takeover`,
+    `/learn`, `/toggle-private`) instead of the old `/lib:session` family.
+  - **Server compatibility:** requires a Librarian server running the
+    sessions-rethink PR 1 monorepo build (the `store_handoff` /
+    `list_handoffs` / `claim_handoff` and `conv_state_*` MCP tools must
+    exist).
+  - **Migration:** existing operators should restart Codex after updating
+    the plugin. The three retired hooks (`SessionStart`, `PostCompact`,
+    `Stop`) need to be **un-approved** in Codex's `/hooks` UI; the new
+    build refuses to register them but Codex's per-event approval cache
+    is local.
+
 ### Added
 
 - **Conv-state injection on every UserPromptSubmit.** Implements

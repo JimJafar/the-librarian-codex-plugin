@@ -1,29 +1,29 @@
 // src/dispatch.mjs
+//
 // Single entry point bundled into bin/librarian-codex-hook.js. Reads the
 // Codex hook payload from stdin, routes by `hook_event_name` to a handler,
 // writes the JSON result (or `{}` on any failure) to stdout, and exits 0.
 //
+// sessions-rethink PR 3 — the only registered handler now is the
+// UserPromptSubmit conv-state injector (spec §4.9). The legacy
+// SessionStart / PostCompact / Stop hooks are retired with the rest of the
+// session subsystem.
+//
 // Two invariants every hook obeys:
-//  1. Always exit 0. A non-zero exit blocks Codex's turn and we are not in
-//     the business of that — the privacy gate is "don't record", not "stop
-//     the model".
-//  2. Stdout is hook protocol. Never print stray debug output: a stray line
-//     on `UserPromptSubmit` would be injected into the model's context.
-//     All diagnostics go through src/log.mjs to a sidecar log.jsonl.
+//  1. Always exit 0. A non-zero exit blocks Codex's turn; the four
+//     user-facing verbs (/handoff, /takeover, /learn, /toggle-private)
+//     are now pure agent operations and never run through a hook.
+//  2. Stdout is hook protocol. Never print stray debug output: a stray
+//     line on `UserPromptSubmit` would be injected into the model's
+//     context. All diagnostics go through src/log.mjs to a sidecar
+//     log.jsonl.
 
-import { handleSessionStart } from "./handlers/session-start.mjs";
 import { handleUserPromptSubmit } from "./handlers/user-prompt-submit.mjs";
-import { handlePostCompact } from "./handlers/post-compact.mjs";
-import { handleStop } from "./handlers/stop.mjs";
 import { log as fileLog } from "./log.mjs";
-import { DEFAULT_STATE, loadState, saveState, withLock } from "./state-store.mjs";
 import { createMcpClient } from "./mcp-client.mjs";
 
 const HANDLERS = {
-  SessionStart: handleSessionStart,
   UserPromptSubmit: handleUserPromptSubmit,
-  PostCompact: handlePostCompact,
-  Stop: handleStop,
 };
 
 async function readStdinJson() {
@@ -43,20 +43,12 @@ function buildDeps(payload) {
   const endpoint = process.env.LIBRARIAN_MCP_URL;
   const token = process.env.LIBRARIAN_AGENT_TOKEN;
 
-  // Build the MCP client lazily: a hook that doesn't need to call the server
-  // (e.g. when off-record) shouldn't fail just because the env var is unset.
-  // Handlers that need the client will fail-soft and log.
-  //
-  // Critical safety: if dataDir is missing we cannot persist state across hook
-  // invocations, which means we cannot detect "session already attached" —
-  // bootstrapping a session would spam start_session every turn. So we refuse
-  // to construct the MCP client at all without a dataDir. Recording is
-  // disabled, but @librarian-driven explicit calls (which go through Codex's
-  // own MCP layer, not this client) still work.
+  // Build the MCP client lazily: a hook that doesn't need to call the
+  // server shouldn't fail just because the env var is unset. The conv-
+  // state inject handler fail-softs and logs.
   let _client = null;
   const getClient = () => {
     if (_client) return _client;
-    if (!dataDir) return null;
     if (!endpoint || !token) return null;
     try {
       _client = createMcpClient({ endpoint, token });
@@ -70,13 +62,6 @@ function buildDeps(payload) {
     dataDir,
     payload,
     log: dataDir ? (entry) => fileLog(dataDir, entry) : async () => {},
-    // When dataDir is missing we still return DEFAULT_STATE (not `{}`) so
-    // handlers reading `state.private` / `state.session_id` see the sane
-    // defaults rather than `undefined` — which would coerce to false/null
-    // anyway but reads worse and trips strict assertions.
-    loadState: dataDir ? () => loadState(dataDir) : async () => ({ ...DEFAULT_STATE }),
-    saveState: dataDir ? (state) => saveState(dataDir, state) : async () => {},
-    withLock: dataDir ? (fn) => withLock(dataDir, fn) : (fn) => fn(),
     getClient,
     now: () => Date.now(),
     env: process.env,
@@ -110,9 +95,6 @@ export async function main() {
 }
 
 // Run main() only when invoked as the entry point — never on test imports.
-// The canonical ESM pattern: compare import.meta.url to the URL form of
-// process.argv[1]. Works for both `node src/dispatch.mjs` and the bundled
-// `node bin/librarian-codex-hook.js`.
 import { pathToFileURL } from "node:url";
 
 const isEntryPoint =
