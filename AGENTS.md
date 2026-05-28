@@ -64,9 +64,6 @@ push, and never invent new ones unilaterally:
 
 Open source means people depend on what we ship. Treat that with care.
 
-- **No surprise breaking changes.** A breaking change is a major bump
-  with a CHANGELOG migration note explaining what changed and how to
-  adapt. Deprecate in one release, remove in the next.
 - **Every user-visible change updates `CHANGELOG.md`.** Add an entry
   under `## [Unreleased]` in the same PR that ships the change — not
   a follow-up. Internal-only refactors can skip; when unsure, add the
@@ -83,10 +80,17 @@ Open source means people depend on what we ship. Treat that with care.
 Always branch and PR. One change per PR. Conventional commit subject
 (`<type>(<scope>): <subject>`) and a body that explains the *why*; the
 diff explains the *what*. When an AI agent meaningfully contributed,
-include a `Co-Authored-By:` trailer — don't be sneaky about who wrote
-the code. Never `--force` push to `main` or `master`, ever; other
-long-lived branches only with explicit owner authorisation in the same
-conversation.
+include a `Co-Authored-By:` trailer.
+
+### Releases
+
+User-visible PRs need a release. Bump-size rule (PATCH / MINOR / MAJOR),
+trigger criteria, and the full per-repo procedure (two version files
+in lockstep — `.codex-plugin/plugin.json` + `package.json` — CHANGELOG
+move, tag, GitHub release) live in [`docs/release.md`](./docs/release.md);
+the cross-family runbook covering all six repos is at the monorepo's
+[`docs/release-runbook.md`](https://github.com/JimJafar/the-librarian/blob/main/docs/release-runbook.md).
+Read those before cutting a release — don't reinvent the steps.
 
 ### Tests are part of the change
 
