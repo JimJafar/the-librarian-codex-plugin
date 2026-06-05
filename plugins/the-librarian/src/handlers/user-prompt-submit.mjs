@@ -6,7 +6,7 @@
 //
 // Fetch the conv-state row keyed by the Codex run's source_ref and, when
 // present, emit a `hookSpecificOutput.additionalContext` envelope so the
-// LLM sees the current `domain` / `session_id` / `off_record` on every
+// LLM sees the current `conv_id` / `off_record` on every
 // turn (defeats context-compaction-driven state loss). On miss / network
 // failure / misconfig, return `{}` — the prompt reaches the model
 // unchanged. Fail-soft per AGENTS.md §2.
@@ -84,14 +84,10 @@ function parseConvState(result) {
 
 // Byte-identical with the family-wide canonical block (spec §4.9).
 function renderConvStateBlock(state) {
-  const domain = state.domain ?? "unknown";
-  const sessionId = state.session_id ?? "none";
   const offRecord = state.off_record ? "true" : "false";
   return [
     "<conversation-state>",
     `  conv_id: ${state.conv_id}`,
-    `  domain: ${domain}`,
-    `  session_id: ${sessionId}`,
     `  off_record: ${offRecord}`,
     "</conversation-state>",
   ].join("\n");

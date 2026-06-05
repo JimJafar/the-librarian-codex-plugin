@@ -161,9 +161,11 @@ function callsSince(from) {
       );
       const block = parsed.hookSpecificOutput.additionalContext;
       assert(block.includes("conv_id: codex:run:smoke-run:cwd:/proj"), "block has conv_id");
-      assert(block.includes("domain: coding"), "block has domain");
-      assert(block.includes("session_id: ses_attached"), "block has session_id");
       assert(block.includes("off_record: false"), "block has off_record");
+      // The retired domain/session_id lines are dropped from the rendered
+      // block even when present on the server row.
+      assert(!block.includes("domain"), "block omits domain");
+      assert(!block.includes("session_id"), "block omits session_id");
       const calls = callsSince(from);
       assert(
         calls.length === 1 && calls[0].tool === "conv_state_get",

@@ -47,11 +47,19 @@ test("conv_state_get hit returns the canonical block as additionalContext", asyn
   const result = await handleUserPromptSubmit({ prompt: "hello", cwd: "/p" }, deps);
   assert.equal(result.hookSpecificOutput?.hookEventName, "UserPromptSubmit");
   const block = result.hookSpecificOutput.additionalContext;
-  assert.ok(block.includes("<conversation-state>"));
-  assert.ok(block.includes("conv_id: codex:run:r1:cwd:/p"));
-  assert.ok(block.includes("domain: coding"));
-  assert.ok(block.includes("session_id: ses_attached"));
-  assert.ok(block.includes("off_record: false"));
+  // The block is exactly conv_id + off_record — the retired domain/session_id
+  // lines are dropped even when present on the server row.
+  assert.equal(
+    block,
+    [
+      "<conversation-state>",
+      "  conv_id: codex:run:r1:cwd:/p",
+      "  off_record: false",
+      "</conversation-state>",
+    ].join("\n"),
+  );
+  assert.ok(!block.includes("domain"));
+  assert.ok(!block.includes("session_id"));
   // Only one MCP call — conv_state_get. No bootstrap, no privacy gating.
   assert.equal(client.calls.length, 1);
   assert.equal(client.calls[0].name, "conv_state_get");

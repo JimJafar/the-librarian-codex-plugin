@@ -18,8 +18,8 @@ It gives Codex:
   verbs — `/handoff`, `/takeover`, `/learn`, `/toggle-private` — to drive
   the tools;
 - a **per-turn conv-state injection hook** that keeps the model aware of
-  which domain its memory writes route to (multi-domain support survives
-  compaction).
+  its current conv-state — `conv_id` and the `off_record` flag, keyed by
+  harness — so that state survives compaction.
 
 ## Install
 
@@ -88,7 +88,7 @@ The single registered `UserPromptSubmit` hook fetches the conv-state row for
 this Codex run (keyed by `source_ref = codex:run:<id>:cwd:<abs>`) and, when
 one exists, emits a `<conversation-state>` block via
 `hookSpecificOutput.additionalContext`. That lets the model see the current
-`domain` / `session_id` / `off_record` on every turn — even after a
+`conv_id` / `off_record` on every turn — even after a
 context compaction that would otherwise drop the system message.
 
 The hook never blocks a turn: a missing row, a network failure, or a

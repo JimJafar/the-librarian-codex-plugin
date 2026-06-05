@@ -77,14 +77,10 @@ function parseConvState(result) {
   }
 }
 function renderConvStateBlock(state) {
-  const domain = state.domain ?? "unknown";
-  const sessionId = state.session_id ?? "none";
   const offRecord = state.off_record ? "true" : "false";
   return [
     "<conversation-state>",
     `  conv_id: ${state.conv_id}`,
-    `  domain: ${domain}`,
-    `  session_id: ${sessionId}`,
     `  off_record: ${offRecord}`,
     "</conversation-state>"
   ].join("\n");
