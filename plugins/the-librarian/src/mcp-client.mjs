@@ -5,9 +5,8 @@
 // response size capped), refactored to plain ESM and dependency-injected
 // transport for testability.
 //
-// Tools called from hook handlers: start_session, list_sessions,
-// continue_session, checkpoint_session, pause_session, end_session,
-// record_session_event. All return prose text bodies; callers handle parsing.
+// Tools called from hook handlers (currently just conv_state_get, for
+// conv-state injection). All return prose text bodies; callers handle parsing.
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024; // 8 MiB

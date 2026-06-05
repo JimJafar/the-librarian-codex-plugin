@@ -2,7 +2,7 @@
 
 You're an AI agent working on this repo. It's part of
 [The Librarian](https://github.com/JimJafar/the-librarian) — a portable
-memory + session layer for AI agents, open source, designed for
+memory + handoff layer for AI agents, open source, designed for
 production use by people we'll never meet. Read this before your first
 commit. Follow it on every change.
 
@@ -49,16 +49,16 @@ Three things stay consistent across the family. Don't change any of
 them in one repo without changing all of them in the same coordinated
 push, and never invent new ones unilaterally:
 
-- **`/lib:session` verbs:** `start`, `list`, `resume`, `checkpoint`,
-  `pause`, `end`, `search`, plus `/lib-toggle-private`. Canonical
+- **Slash commands:** `/handoff`, `/takeover`, `/learn`, and
+  `/toggle-private`. Same four verbs across every harness. Canonical
   contract: [`the-librarian/docs/slash-commands.md`](https://github.com/JimJafar/the-librarian/blob/main/docs/slash-commands.md).
-- **Three-state models:** sessions are `active | paused | ended`;
-  memories are `active | proposed | archived`. The retired verbs
-  (`archive`, `restore`, `delete`, `status`, `confirm_memory`,
-  `reject_memory`) are gone for good.
+- **Memory state model:** memories are `active | proposed | archived`.
+  Proposals are accepted / rejected via the dashboard or `update_memory`;
+  deletion is `archive_memory`. The retired verbs (`confirm_memory`,
+  `reject_memory`, `resolve_conflict`) are gone for good.
 - **`source_ref` shape:** `<harness>:<run-id>:cwd:<abs>` when the run
   id is available, else `cwd:<abs>`. This is the cross-harness primary
-  key for sessions.
+  key for handoffs and memory.
 
 ### Respect your consumers
 

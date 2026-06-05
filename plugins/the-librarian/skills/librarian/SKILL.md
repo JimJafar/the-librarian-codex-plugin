@@ -36,7 +36,7 @@ slash command surface; the LLM is the interface.
    - `## Open questions`
 3. Carry these args: `title` (≤ 80 chars), `document_md`, `project_key`
    (inferred), `cwd`, `harness: "codex"`, `source_ref` (see below),
-   `conv_id` (your source_ref), optional `tags`.
+   optional `tags`.
 4. Report the `handoff_id` and tell the user to `/takeover` in any agent
    on the same cwd.
 
@@ -59,7 +59,7 @@ slash command surface; the LLM is the interface.
    corrections.
 3. Present as a numbered multi-select list. Ask which to keep.
 4. For each chosen lesson, call `propose_memory` (not `remember`) with
-   `title`, `body`, `tags`, `applies_to`, `conv_id` (your source_ref).
+   `title`, `body`, `tags`, `applies_to`.
 
 ### `/toggle-private` (the user says "go private", "back on the record", …)
 
@@ -106,7 +106,7 @@ archived`. Proposals are accepted / rejected via the dashboard or
 
 **`source_ref` for Codex** is
 `codex:run:{CODEX_RUN_ID}:cwd:{absolute_path}` when a run id is set,
-`cwd:{absolute_path}` otherwise. Same shape is used for `conv_id`.
+`cwd:{absolute_path}` otherwise.
 
 ## Cross-harness handover
 

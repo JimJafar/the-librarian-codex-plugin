@@ -9,6 +9,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Conv-state block trimmed to `conv_id` + `off_record`.** The injected
+  `<conversation-state>` block drops the retired `domain` and `session_id`
+  lines (lockstep with the rest of the Librarian family). AGENTS.md's
+  cross-repo contract is updated from the retired `/lib:session` verbs to
+  the current handoff model (`/handoff`, `/takeover`, `/learn`,
+  `/toggle-private`; memory states `active | proposed | archived`).
+  SKILL.md and README drop the retired `conv_id` / `domain` / `session_id`
+  residue (`conv_id` was a D16 domain-routing arg, now gone).
 - **Marketplace install plumbing aligned with Codex.** Four discoveries
   while landing the first working install (see
   [`notes/marketplace-shape.md`](notes/marketplace-shape.md) caveats 3–5):
