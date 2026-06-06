@@ -4,10 +4,20 @@
 // Covers spec §4.9: on a hit, prepend the canonical <conversation-state>
 // block via additionalContext; on miss / no-client / bad shape / thrown
 // error, return `{}` so the prompt reaches the model unchanged.
+//
+// spec 041 A4 — the same single conv_state_get response now also carries a
+// top-level `primer` string (the awareness primer). When non-empty it's
+// emitted as a byte-identical <librarian> block ALONGSIDE the conv-state
+// block (conv-state first, then primer, `\n`-joined). The primer block is
+// emitted even when there is no conv-state row. Empty primer / failure →
+// no block, fail-soft.
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { handleUserPromptSubmit } from "../plugins/the-librarian/src/handlers/user-prompt-submit.mjs";
+import {
+  handleUserPromptSubmit,
+  renderAwarenessPrimer,
+} from "../plugins/the-librarian/src/handlers/user-prompt-submit.mjs";
 
 function makeClient(stub) {
   const calls = [];
@@ -116,4 +126,91 @@ test("source_ref falls back to cwd:<absolute> when no run id is set (always deri
   assert.ok(result.hookSpecificOutput?.additionalContext?.includes("<conversation-state>"));
   assert.equal(client.calls.length, 1);
   assert.equal(client.calls[0].args.conv_id, "cwd:/p");
+});
+
+// --- spec 041 A4 — awareness primer -------------------------------------
+
+const PRIMER = "You have The Librarian: durable, cross-session memory.";
+
+// The canonical <librarian> block, byte-identical across the harness family
+// (spec 041 Decision 2). col-0 tags, primer verbatim (NOT indented), \n-joined.
+const LIBRARIAN_BLOCK = `<librarian>\n${PRIMER}\n</librarian>`;
+
+const CONV_STATE_BLOCK = [
+  "<conversation-state>",
+  "  conv_id: codex:run:r1:cwd:/p",
+  "  off_record: false",
+  "</conversation-state>",
+].join("\n");
+
+test("renderAwarenessPrimer is byte-identical to the canonical block", () => {
+  // Non-empty → exactly three lines, col-0 tags, primer verbatim, \n-joined.
+  assert.equal(renderAwarenessPrimer(PRIMER), `<librarian>\n${PRIMER}\n</librarian>`);
+  // Empty / falsy → "" (no block).
+  assert.equal(renderAwarenessPrimer(""), "");
+  assert.equal(renderAwarenessPrimer(undefined), "");
+  assert.equal(renderAwarenessPrimer(null), "");
+});
+
+test("primer + row → conv-state block THEN the <librarian> block", async () => {
+  const rowWithPrimer = JSON.stringify({
+    conv_id: "codex:run:r1:cwd:/p",
+    off_record: false,
+    primer: PRIMER,
+  });
+  const client = makeClient(({ name }) =>
+    name === "conv_state_get" ? rowWithPrimer : "",
+  );
+  const deps = makeDeps({ client });
+  const result = await handleUserPromptSubmit({ prompt: "hello", cwd: "/p" }, deps);
+  const block = result.hookSpecificOutput.additionalContext;
+  assert.equal(block, `${CONV_STATE_BLOCK}\n${LIBRARIAN_BLOCK}`);
+  // Still a single conv_state_get fetch — no second call for the primer.
+  assert.equal(client.calls.length, 1);
+  assert.equal(client.calls[0].name, "conv_state_get");
+});
+
+test("primer + NO row → the bare <librarian> block (survives a null row)", async () => {
+  // A2's no-row shape: `{ primer }` only (no conv_id).
+  const noRow = JSON.stringify({ primer: PRIMER });
+  const client = makeClient(({ name }) => (name === "conv_state_get" ? noRow : ""));
+  const deps = makeDeps({ client });
+  const result = await handleUserPromptSubmit({ prompt: "hi", cwd: "/p" }, deps);
+  const block = result.hookSpecificOutput.additionalContext;
+  // EXACTLY the byte-identical <librarian> block — no conv-state block.
+  assert.equal(block, LIBRARIAN_BLOCK);
+  assert.ok(!block.includes("<conversation-state>"));
+});
+
+test("empty primer + row → conv-state block only, NO <librarian>", async () => {
+  const row = JSON.stringify({
+    conv_id: "codex:run:r1:cwd:/p",
+    off_record: false,
+    primer: "",
+  });
+  const client = makeClient(({ name }) => (name === "conv_state_get" ? row : ""));
+  const deps = makeDeps({ client });
+  const result = await handleUserPromptSubmit({ prompt: "hi", cwd: "/p" }, deps);
+  const block = result.hookSpecificOutput.additionalContext;
+  assert.equal(block, CONV_STATE_BLOCK);
+  assert.ok(!block.includes("<librarian>"));
+});
+
+test("empty primer + NO row → {} (nothing to inject)", async () => {
+  const noRow = JSON.stringify({ primer: "" });
+  const client = makeClient(({ name }) => (name === "conv_state_get" ? noRow : ""));
+  const deps = makeDeps({ client });
+  const result = await handleUserPromptSubmit({ prompt: "hi", cwd: "/p" }, deps);
+  assert.deepEqual(result, {});
+});
+
+test("a thrown conv_state_get → no block, turn proceeds (fail-soft, primer too)", async () => {
+  const client = {
+    callTool: async () => {
+      throw new Error("network down");
+    },
+  };
+  const deps = makeDeps({ client });
+  const result = await handleUserPromptSubmit({ prompt: "hi", cwd: "/p" }, deps);
+  assert.deepEqual(result, {});
 });

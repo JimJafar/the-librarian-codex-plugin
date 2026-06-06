@@ -41,10 +41,15 @@ async function injectConvState(payload, deps) {
     }
     const parsed = parseConvState(toolResult);
     if (!parsed) return {};
+    const blocks = [];
+    if (parsed.state) blocks.push(renderConvStateBlock(parsed.state));
+    const primerBlock = renderAwarenessPrimer(parsed.primer);
+    if (primerBlock) blocks.push(primerBlock);
+    if (blocks.length === 0) return {};
     return {
       hookSpecificOutput: {
         hookEventName: "UserPromptSubmit",
-        additionalContext: renderConvStateBlock(parsed)
+        additionalContext: blocks.join("\n")
       }
     };
   } catch (err) {
@@ -68,13 +73,18 @@ function parseConvState(result) {
   } else {
     return null;
   }
-  if (typeof text !== "string" || text.startsWith("No conversation state")) return null;
+  if (typeof text !== "string") return null;
+  let obj;
   try {
-    const obj = JSON.parse(text);
-    return obj && typeof obj === "object" && typeof obj.conv_id === "string" ? obj : null;
+    obj = JSON.parse(text);
   } catch {
     return null;
   }
+  if (!obj || typeof obj !== "object") return null;
+  return {
+    state: typeof obj.conv_id === "string" ? obj : null,
+    primer: typeof obj.primer === "string" ? obj.primer : ""
+  };
 }
 function renderConvStateBlock(state) {
   const offRecord = state.off_record ? "true" : "false";
@@ -84,6 +94,10 @@ function renderConvStateBlock(state) {
     `  off_record: ${offRecord}`,
     "</conversation-state>"
   ].join("\n");
+}
+function renderAwarenessPrimer(primer) {
+  if (!primer) return "";
+  return ["<librarian>", primer, "</librarian>"].join("\n");
 }
 
 // plugins/the-librarian/src/log.mjs

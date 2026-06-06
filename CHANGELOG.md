@@ -7,6 +7,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Awareness primer injected every turn.** On `UserPromptSubmit`, the same
+  single `conv_state_get` response now also carries the operator-authored
+  awareness primer (a short note reminding the agent it has durable,
+  cross-session memory and which verbs to use). When non-empty it's emitted
+  as a byte-identical `<librarian>` block via `additionalContext`, alongside
+  the `<conversation-state>` block (conv-state first, then the primer). The
+  primer block appears even when there's no conversation-state row; an empty
+  primer or any fetch/parse failure emits no block and the turn proceeds
+  unchanged (fail-soft). Parsing is adapted to the server's JSON-only
+  response shape (no-row is now `{ primer }`, not the retired
+  "No conversation state…" prose). No new MCP call and no new hook.
+
 ### Changed
 
 - **Conv-state block trimmed to `conv_id` + `off_record`.** The injected
