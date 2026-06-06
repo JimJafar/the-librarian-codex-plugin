@@ -34,16 +34,21 @@ if (!fs.existsSync(bin)) {
 // --- Mock Librarian -------------------------------------------------------
 
 const allCalls = [];
-let convStatePayload = null; // staged JSON for the next conv_state_get response
-let convStateMiss = false; // when true, conv_state_get returns the "no row" prose
+let convStateRow = null; // staged row object for the next conv_state_get response (no primer)
+let convStatePrimer = ""; // staged top-level awareness primer (A2 returns it every call)
 
+// A2 made conv_state_get ALWAYS return a JSON object: with a row →
+// `{ ...rowFields, primer }`; with no row → `{ primer }`. The old
+// "No conversation state…" prose is gone.
 function mockResponse(toolName) {
   allCalls.push({ tool: toolName });
   if (toolName !== "conv_state_get") {
     return `(mock has no response for ${toolName})`;
   }
-  if (convStateMiss) return "No conversation state for conv_id codex:run:smoke-run:cwd:/proj.";
-  return convStatePayload ?? "No conversation state for conv_id codex:run:smoke-run:cwd:/proj.";
+  const response = convStateRow
+    ? { ...convStateRow, primer: convStatePrimer }
+    : { primer: convStatePrimer };
+  return JSON.stringify(response);
 }
 
 function startMock() {
@@ -138,7 +143,7 @@ function callsSince(from) {
     console.log("\nScenario 1: UserPromptSubmit with a conv_state hit injects the canonical block");
     {
       const dir = freshTmp();
-      convStatePayload = JSON.stringify({
+      convStateRow = {
         conv_id: "codex:run:smoke-run:cwd:/proj",
         harness: "codex",
         domain: "coding",
@@ -146,8 +151,8 @@ function callsSince(from) {
         off_record: false,
         created_at: "2026-05-27T00:00:00.000Z",
         updated_at: "2026-05-27T00:00:00.000Z",
-      });
-      convStateMiss = false;
+      };
+      convStatePrimer = ""; // no primer this scenario — conv-state block only
       const from = snapshotCalls();
       const { code, stdout } = await runHook(
         { hook_event_name: "UserPromptSubmit", prompt: "hi", cwd: "/proj" },
@@ -173,11 +178,11 @@ function callsSince(from) {
       );
     }
 
-    console.log("\nScenario 2: UserPromptSubmit with a conv_state miss returns {}");
+    console.log("\nScenario 2: UserPromptSubmit with a conv_state miss (no row, no primer) returns {}");
     {
       const dir = freshTmp();
-      convStateMiss = true;
-      convStatePayload = null;
+      convStateRow = null;
+      convStatePrimer = "";
       const from = snapshotCalls();
       const { code, stdout } = await runHook(
         { hook_event_name: "UserPromptSubmit", prompt: "hi", cwd: "/proj" },
@@ -220,6 +225,67 @@ function callsSince(from) {
       }
       const calls = callsSince(from);
       assert(calls.length === 0, "no MCP calls for retired events");
+    }
+
+    // --- spec 041 A4 — awareness primer ---------------------------------
+
+    const PRIMER = "You have The Librarian: durable, cross-session memory.";
+    const LIBRARIAN_BLOCK = `<librarian>\n${PRIMER}\n</librarian>`;
+    const CONV_STATE_BLOCK = [
+      "<conversation-state>",
+      "  conv_id: codex:run:smoke-run:cwd:/proj",
+      "  off_record: false",
+      "</conversation-state>",
+    ].join("\n");
+
+    console.log("\nScenario 5: row + primer → conv-state block THEN the byte-identical <librarian> block");
+    {
+      const dir = freshTmp();
+      convStateRow = { conv_id: "codex:run:smoke-run:cwd:/proj", off_record: false };
+      convStatePrimer = PRIMER;
+      const from = snapshotCalls();
+      const { code, stdout } = await runHook(
+        { hook_event_name: "UserPromptSubmit", prompt: "hi", cwd: "/proj" },
+        { ...baseEnv, PLUGIN_DATA: dir },
+      );
+      assert(code === 0, "hook exits 0");
+      const block = JSON.parse(stdout).hookSpecificOutput.additionalContext;
+      assert(block === `${CONV_STATE_BLOCK}\n${LIBRARIAN_BLOCK}`, "both blocks, conv-state first");
+      const calls = callsSince(from);
+      assert(
+        calls.length === 1 && calls[0].tool === "conv_state_get",
+        "still exactly one MCP call (no second fetch for the primer)",
+      );
+    }
+
+    console.log("\nScenario 6: NO row + primer → the bare <librarian> block (survives a null row)");
+    {
+      const dir = freshTmp();
+      convStateRow = null;
+      convStatePrimer = PRIMER;
+      const { code, stdout } = await runHook(
+        { hook_event_name: "UserPromptSubmit", prompt: "hi", cwd: "/proj" },
+        { ...baseEnv, PLUGIN_DATA: dir },
+      );
+      assert(code === 0, "hook exits 0");
+      const block = JSON.parse(stdout).hookSpecificOutput.additionalContext;
+      assert(block === LIBRARIAN_BLOCK, `additionalContext is exactly the <librarian> block (got ${JSON.stringify(block)})`);
+      assert(!block.includes("<conversation-state>"), "no conv-state block when there's no row");
+    }
+
+    console.log("\nScenario 7: row + empty primer → conv-state block only, no <librarian>");
+    {
+      const dir = freshTmp();
+      convStateRow = { conv_id: "codex:run:smoke-run:cwd:/proj", off_record: false };
+      convStatePrimer = "";
+      const { code, stdout } = await runHook(
+        { hook_event_name: "UserPromptSubmit", prompt: "hi", cwd: "/proj" },
+        { ...baseEnv, PLUGIN_DATA: dir },
+      );
+      assert(code === 0, "hook exits 0");
+      const block = JSON.parse(stdout).hookSpecificOutput.additionalContext;
+      assert(block === CONV_STATE_BLOCK, "conv-state block only");
+      assert(!block.includes("<librarian>"), "no <librarian> block when the primer is empty");
     }
 
     console.log("\nsmoke passed.");
