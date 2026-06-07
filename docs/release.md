@@ -52,6 +52,14 @@ git push origin v$NEW
 gh release create v$NEW --title "v$NEW" --notes-from-tag
 ```
 
-Users pick it up via `codex plugin update the-librarian` — the
-marketplace pulls `plugins/the-librarian/.codex-plugin/plugin.json`
+Users pick it up by refreshing the marketplace clone and **re-adding**
+the plugin (there is **no** `codex plugin update` / `codex plugin path`
+command):
+
+```sh
+codex plugin marketplace upgrade the-librarian-codex   # refresh the clone (marketplace NAME)
+codex plugin add the-librarian@the-librarian-codex     # re-pull the latest plugin.json
+```
+
+The marketplace pulls `plugins/the-librarian/.codex-plugin/plugin.json`
 from the default branch on demand.
