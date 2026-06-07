@@ -2,7 +2,8 @@
 // scripts/validate.mjs
 // Pre-commit / pre-tag sanity for the static plugin artefacts. Manifest +
 // hooks.json + marketplace.json shape; bundled bin/* has no unbundled
-// `require`/`import` of node_modules; .mcp.json env templating intact.
+// `require`/`import` of node_modules; the bundled .mcp.json declares the
+// stdio proxy with the env_vars allowlist (and no remote ${VAR}-in-url).
 //
 // Exits 0 with `OK` on success; exits 1 with a list of findings on failure.
 // Reuses the test-runner-friendly checks in tests/manifest.test.mjs so we
@@ -37,12 +38,12 @@ function checkPluginJson() {
   if (m.name && !/^[a-z][a-z0-9-]*$/.test(m.name)) fail(`.codex-plugin/plugin.json: name must be kebab-case`);
   if (m.version && !/^\d+\.\d+\.\d+/.test(m.version)) fail(`.codex-plugin/plugin.json: version must be semver`);
   if (m.skills !== "./skills/") fail(`.codex-plugin/plugin.json: skills must equal './skills/'`);
-  if ("mcpServers" in m) {
-    // Codex's .mcp.json parser doesn't expand ${VAR} in URLs, so users
-    // register the MCP server manually via `codex mcp add` (see README).
-    // A stale mcpServers pointer would re-introduce the "relative URL
-    // without a base" startup failure.
-    fail(`.codex-plugin/plugin.json: must NOT declare mcpServers (Codex registers it manually; see README)`);
+  // The plugin bundles the Librarian MCP server as a stdio↔HTTP proxy and
+  // declares it here. Codex can't expand ${VAR} into a remote HTTP url, but
+  // it CAN forward named shell env vars into a bundled stdio server via the
+  // .mcp.json `env_vars` allowlist — that's the mechanism we use.
+  if (m.mcpServers !== "./.mcp.json") {
+    fail(`.codex-plugin/plugin.json: mcpServers must equal './.mcp.json' (the bundled stdio proxy declaration)`);
   }
   if (m.hooks && m.hooks !== "./hooks/hooks.json") {
     fail(`.codex-plugin/plugin.json: hooks must equal './hooks/hooks.json'`);
@@ -55,14 +56,68 @@ function checkPluginJson() {
   }
 }
 
-function checkMcpJsonAbsent() {
-  // See checkPluginJson: bundled .mcp.json was retired because Codex's
-  // parser treats ${LIBRARIAN_MCP_URL} as a literal. Guard against
-  // accidentally re-introducing it.
-  const p = path.join(pluginRoot, ".mcp.json");
-  if (fs.existsSync(p)) {
-    fail(`plugins/the-librarian/.mcp.json: must NOT exist (Codex doesn't expand \${VAR} in URLs; users register via 'codex mcp add')`);
+function checkMcpJson() {
+  // The bundled .mcp.json declares ONE stdio server (the proxy). It must NOT
+  // use a remote `url`/`type: http` with a ${VAR} template — Codex doesn't
+  // expand env vars into a remote URL (openai/codex#7521), which is the bug
+  // that retired the old http-typed .mcp.json. The working mechanism is a
+  // stdio `command` + the `env_vars` allowlist that forwards the user's
+  // URL + token into the spawned proxy.
+  const m = readJsonOrFail(".mcp.json");
+  if (!m) return;
+  const servers = m.mcpServers ?? m.mcp_servers;
+  if (!servers || typeof servers !== "object") {
+    fail(`.mcp.json: must declare an 'mcpServers' (or 'mcp_servers') object`);
+    return;
   }
+  const names = Object.keys(servers);
+  if (names.length !== 1) {
+    fail(`.mcp.json: expected exactly one server, found ${names.length}`);
+  }
+  for (const [name, entry] of Object.entries(servers)) {
+    if (entry.command !== "node") {
+      fail(`.mcp.json: server '${name}' must use command 'node' (the bundled proxy is a Node script)`);
+    }
+    if (!Array.isArray(entry.args) || entry.args.length === 0) {
+      fail(`.mcp.json: server '${name}' must pass the proxy path in 'args'`);
+    } else if (!entry.args.some((a) => typeof a === "string" && a.includes("bin/librarian-mcp-proxy.js"))) {
+      fail(`.mcp.json: server '${name}' args must invoke bin/librarian-mcp-proxy.js`);
+    } else if (!entry.args.some((a) => typeof a === "string" && a.includes("${PLUGIN_ROOT}"))) {
+      // The path must resolve relative to the plugin install dir; the only
+      // portable handle Codex documents is ${PLUGIN_ROOT}.
+      fail(`.mcp.json: server '${name}' args must resolve the proxy via \${PLUGIN_ROOT}`);
+    }
+    // A remote URL field would mean we're back on the broken http path.
+    if ("url" in entry || entry.type === "http" || entry.type === "streamable-http") {
+      fail(`.mcp.json: server '${name}' must be a stdio server — no remote 'url'/'type: http' (Codex can't expand \${VAR} into a URL)`);
+    }
+    // The whole point: the per-user URL + token reach the proxy via the
+    // env_vars allowlist, not hardcoded anywhere.
+    const allow = entry.env_vars;
+    for (const v of ["LIBRARIAN_MCP_URL", "LIBRARIAN_AGENT_TOKEN"]) {
+      if (!Array.isArray(allow) || !allow.includes(v)) {
+        fail(`.mcp.json: server '${name}' env_vars must allowlist ${v}`);
+      }
+    }
+    // No secret may be baked into the manifest.
+    const blob = JSON.stringify(entry);
+    if (/Bearer\s+\S/.test(blob) || /token["']?\s*[:=]\s*["'][^$]/.test(blob)) {
+      fail(`.mcp.json: server '${name}' must not embed a literal token/bearer`);
+    }
+  }
+}
+
+function checkProxyBundle() {
+  const bin = path.join(pluginRoot, "bin/librarian-mcp-proxy.js");
+  if (!fs.existsSync(bin)) {
+    fail(`bin/librarian-mcp-proxy.js: missing — run 'npm run build'`);
+    return;
+  }
+  const body = fs.readFileSync(bin, "utf8");
+  if (!body.startsWith("#!/usr/bin/env node")) {
+    fail(`bin/librarian-mcp-proxy.js: missing shebang banner`);
+  }
+  scanBundleDeps(bin, body);
 }
 
 function checkHooksJson() {
@@ -123,22 +178,13 @@ function checkSkillMd() {
   if (lines > 120) fail(`skills/librarian/SKILL.md: ${lines} lines exceeds the 120-line budget`);
 }
 
-function checkBundle() {
-  const bin = path.join(pluginRoot, "bin/librarian-codex-hook.js");
-  if (!fs.existsSync(bin)) {
-    fail(`bin/librarian-codex-hook.js: missing — run 'npm run build'`);
-    return;
-  }
-  const body = fs.readFileSync(bin, "utf8");
-  if (!body.startsWith("#!/usr/bin/env node")) {
-    fail(`bin/librarian-codex-hook.js: missing shebang banner`);
-  }
-  // The bundle must be self-contained: any unresolved external import would
-  // crash at hook runtime on the user's machine because we don't ship
-  // node_modules. Allow only Node built-ins. The esbuild output is ESM, so
-  // we have to scan both CJS `require()` AND ESM `import … from "…"` /
-  // dynamic `import("…")` — checking only require() would miss an
-  // accidentally-`external`-marked dependency.
+// The bundles must be self-contained: any unresolved external import would
+// crash at runtime on the user's machine because we don't ship node_modules.
+// Allow only Node built-ins. The esbuild output is ESM, so we scan both CJS
+// `require()` AND ESM `import … from "…"` / dynamic `import("…")` — checking
+// only require() would miss an accidentally-`external`-marked dependency.
+function scanBundleDeps(binPath, body) {
+  const rel = path.relative(pluginRoot, binPath);
   const builtins = new Set([
     "node:fs", "node:path", "node:url", "node:os", "node:child_process",
     "node:module", "node:buffer", "node:stream", "node:events", "node:crypto",
@@ -155,17 +201,31 @@ function checkBundle() {
     re.lastIndex = 0;
     while ((m = re.exec(body))) {
       const dep = m[1];
-      if (!builtins.has(dep)) fail(`bin/librarian-codex-hook.js: unbundled dependency '${dep}'`);
+      if (!builtins.has(dep)) fail(`${rel}: unbundled dependency '${dep}'`);
     }
   }
 }
 
+function checkBundle() {
+  const bin = path.join(pluginRoot, "bin/librarian-codex-hook.js");
+  if (!fs.existsSync(bin)) {
+    fail(`bin/librarian-codex-hook.js: missing — run 'npm run build'`);
+    return;
+  }
+  const body = fs.readFileSync(bin, "utf8");
+  if (!body.startsWith("#!/usr/bin/env node")) {
+    fail(`bin/librarian-codex-hook.js: missing shebang banner`);
+  }
+  scanBundleDeps(bin, body);
+}
+
 checkPluginJson();
-checkMcpJsonAbsent();
+checkMcpJson();
 checkHooksJson();
 checkMarketplaceJson();
 checkSkillMd();
 checkBundle();
+checkProxyBundle();
 
 if (errors.length === 0) {
   console.log("OK");

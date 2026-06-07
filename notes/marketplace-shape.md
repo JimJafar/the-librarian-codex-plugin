@@ -118,7 +118,7 @@ From `plugins/latex/.codex-plugin/plugin.json` (most complete example):
 | `license` | optional | string | SPDX identifier or `"Proprietary"` |
 | `keywords[]` | optional | string[] | |
 | `skills` | optional | string | Path to skills dir, e.g. `"./skills/"` |
-| `mcpServers` | optional | string | Path to bundled `.mcp.json`. **Codex's parser treats URL strings as literals — no `${VAR}` expansion.** For deployments where the URL is per-user, omit this field and have users register via `codex mcp add` (see Caveats). |
+| `mcpServers` | optional | string | Path to bundled `.mcp.json`. **No `${VAR}` expansion in a remote `url`** — but a bundled **stdio** server can use the `env_vars` allowlist to receive per-user secrets from the shell. We ship `"./.mcp.json"` declaring a stdio proxy (see Caveat 4). |
 | `hooks` | optional | string | Path to `hooks/hooks.json` — **not used by bundled examples; per docs** |
 | `interface.displayName` | ✅ | string | Plugins UI title |
 | `interface.shortDescription` | ✅ | string | One-liner under title |
@@ -142,9 +142,10 @@ From `plugins/latex/.codex-plugin/plugin.json` (most complete example):
 `longDescription`, `developerName = "Jim Sangwine"`,
 `category = "Engineering"`, `capabilities = ["Read", "Write"]` (no
 interactive UI), `defaultPrompt = ["Start a Librarian session and recall
-what we know about the current project."]`. **No `mcpServers`** — see
-Caveat 4 (Codex doesn't expand `${VAR}` in MCP URLs, and Librarian
-endpoints are per-user, so users register via `codex mcp add`).
+what we know about the current project."]`, and `mcpServers = "./.mcp.json"`
+— the bundled **stdio proxy** (see Caveat 4: Codex won't expand `${VAR}` in a
+remote URL, so the per-user URL + token are forwarded into the proxy via the
+`env_vars` allowlist instead).
 
 ## Plugin directory layout (observed)
 
@@ -178,16 +179,22 @@ no real example to crib from for those two files).
    `unknown variant 'NONE', expected 'ON_INSTALL' or 'ON_USE'`. We ship
    `"ON_INSTALL"` to match the bundled plugins; the actual auth is the
    `LIBRARIAN_AGENT_TOKEN` env var, not anything Codex collects.
-4. **Codex's `.mcp.json` parser does NOT expand `${VAR}` in URLs.** Confirmed
-   2026-05-28 — a bundled `.mcp.json` with `url: "${LIBRARIAN_MCP_URL}"`
-   produced `MCP startup failed: ... http/request url is invalid: relative
-   URL without a base` at Codex startup. Per
-   [developers.openai.com/codex/mcp](https://developers.openai.com/codex/mcp),
-   the documented schema is literal `url` + `bearer_token_env_var` (env
-   var **name**, not `${...}` template). Where the URL is per-user (true
-   for Librarian — every deployment is different), do NOT bundle
-   `.mcp.json`; have users register the server once via
-   `codex mcp add <name> --url "$VAR" --bearer-token-env-var TOKEN_VAR`.
+4. **Codex's `.mcp.json` parser does NOT expand `${VAR}` in a remote `url`,
+   but it DOES forward shell env vars into a bundled *stdio* server via the
+   `env_vars` allowlist.** Confirmed 2026-05-28 — a bundled `.mcp.json` with
+   `url: "${LIBRARIAN_MCP_URL}"` produced `MCP startup failed: ... http/request
+   url is invalid: relative URL without a base` at Codex startup (still open
+   upstream as openai/codex#7521). The fix that works for a **per-user** URL +
+   token: ship a bundled **stdio** server whose `command`/`args` run a small
+   in-plugin proxy and declare
+   `env_vars = ["LIBRARIAN_MCP_URL", "LIBRARIAN_AGENT_TOKEN"]`; Codex forwards
+   both vars into the spawned process. The proxy relays JSON-RPC to the remote
+   HTTP endpoint (bearer in header only). The plugin now ships exactly this
+   (`.mcp.json` → `node ${PLUGIN_ROOT}/bin/librarian-mcp-proxy.js`). **Open
+   question pending a live Codex test:** the docs show `${PLUGIN_ROOT}` for
+   *hook* commands; whether Codex expands it for MCP `args` is unverified — if
+   not, fall back to `codex mcp add <name> --url "$VAR" --bearer-token-env-var
+   TOKEN_VAR` (still supported, now the documented legacy path).
 5. **Plugins must live in a subdirectory (`plugins/<name>/`), not at the
    marketplace root.** Confirmed 2026-05-28 — `path: "./"` and `path: "."`
    both produced `plugin "<name>" was not found in marketplace`. The

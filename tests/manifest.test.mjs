@@ -55,18 +55,41 @@ test("marketplace.json points at this plugin as a local source", () => {
   assert.equal(typeof entry.policy, "object");
 });
 
-test("plugin manifest does NOT declare an mcpServers pointer", () => {
-  // Codex's .mcp.json parser doesn't expand ${VAR} in URLs, so we can't
-  // ship a portable bundled .mcp.json. Users register the server once
-  // via `codex mcp add` (see README). A stale mcpServers field would
-  // re-introduce the "relative URL without a base" startup failure.
+test("plugin manifest points mcpServers at the bundled .mcp.json", () => {
+  // The plugin now bundles the Librarian MCP server as a stdio↔HTTP proxy.
+  // Codex can't expand ${VAR} into a remote http url, but it CAN forward
+  // named shell env vars into a bundled stdio server via the .mcp.json
+  // `env_vars` allowlist — so the per-user URL + token reach the proxy
+  // without any manual `codex mcp add`.
   const m = readJson(".codex-plugin/plugin.json");
-  assert.equal("mcpServers" in m, false, "mcpServers must NOT be declared");
+  assert.equal(m.mcpServers, "./.mcp.json", "mcpServers must point at the bundled .mcp.json");
 });
 
-test("no bundled .mcp.json ships with the plugin", () => {
+test("the bundled .mcp.json declares one stdio proxy server with the env_vars allowlist", () => {
   const p = path.join(pluginRoot, ".mcp.json");
-  assert.equal(fs.existsSync(p), false, ".mcp.json must NOT exist — Codex's parser doesn't expand env vars in URLs");
+  assert.ok(fs.existsSync(p), ".mcp.json must exist (it declares the bundled stdio proxy)");
+  const m = JSON.parse(fs.readFileSync(p, "utf8"));
+  const servers = m.mcpServers ?? m.mcp_servers;
+  assert.equal(typeof servers, "object", "must declare an mcpServers/mcp_servers object");
+  const names = Object.keys(servers);
+  assert.equal(names.length, 1, "exactly one bundled server");
+  const entry = servers[names[0]];
+  assert.equal(entry.command, "node", "the proxy is a Node script");
+  assert.ok(
+    entry.args.some((a) => a.includes("bin/librarian-mcp-proxy.js")),
+    "args invoke the bundled proxy",
+  );
+  assert.ok(
+    entry.args.some((a) => a.includes("${PLUGIN_ROOT}")),
+    "the proxy path resolves via ${PLUGIN_ROOT}",
+  );
+  // The whole mechanism: per-user URL + token forwarded via the allowlist.
+  for (const v of ["LIBRARIAN_MCP_URL", "LIBRARIAN_AGENT_TOKEN"]) {
+    assert.ok(Array.isArray(entry.env_vars) && entry.env_vars.includes(v), `env_vars must allowlist ${v}`);
+  }
+  // No remote url (the broken http path) and no literal secret.
+  assert.ok(!("url" in entry), "stdio server must not carry a remote url");
+  assert.ok(!/Bearer\s+\S/.test(JSON.stringify(entry)), "no literal bearer token in the manifest");
 });
 
 test("the @librarian skill exists with non-empty SKILL.md", () => {

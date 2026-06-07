@@ -7,6 +7,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Bundled MCP server — no more manual `codex mcp add`.** The plugin now
+  ships the Librarian MCP server as a bundled **stdio↔HTTP JSON-RPC proxy**
+  (`src/mcp-stdio-proxy.mjs` → committed `bin/librarian-mcp-proxy.js`) and
+  declares it in `.mcp.json` with the `env_vars` allowlist
+  `["LIBRARIAN_MCP_URL", "LIBRARIAN_AGENT_TOKEN"]`. Codex spawns the proxy
+  and forwards both per-user vars into it; the proxy relays each JSON-RPC
+  message to the user's remote endpoint. This works around Codex not
+  expanding `${VAR}` into a remote HTTP `url`
+  ([openai/codex#7521](https://github.com/openai/codex/issues/7521)) — the
+  reason the old bundled `.mcp.json` was removed in #11 — while still
+  supporting a per-user URL + token with nothing hardcoded. The proxy reuses
+  the hook's HTTP path (shared `createRpcSender` in `mcp-client.mjs`:
+  `Authorization` header only, `redirect: "error"`, no creds in the URL, size
+  cap) and is fail-soft (transport/HTTP/parse errors become id-correlated
+  JSON-RPC errors; the token never reaches stdout/stderr). The manual
+  `codex mcp add` registration remains documented as a legacy fallback.
+
+  > The bundled server's `command`/`args` path uses `${PLUGIN_ROOT}` (mirroring
+  > the hook wiring); whether Codex expands that for MCP `args` is pending
+  > maintainer verification in a live Codex before release.
+
 ## [0.3.0] — 2026-06-07
 
 ### Added

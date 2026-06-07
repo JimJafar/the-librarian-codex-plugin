@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "librarian": {
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/bin/librarian-mcp-proxy.js"],
+      "env_vars": ["LIBRARIAN_MCP_URL", "LIBRARIAN_AGENT_TOKEN"]
+    }
+  }
+}

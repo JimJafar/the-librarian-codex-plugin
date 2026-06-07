@@ -48,12 +48,18 @@ plugin gives Claude Code:
   is portable.
 - **Hook runtime:** Node 20+. Hooks are stdin-JSON / stdout-JSON executables; we bundle
   with esbuild into single files in `bin/` so users don't run `npm install`.
-- **MCP transport:** HTTP via Codex's native `mcp_servers` config. Codex's `.mcp.json`
-  parser doesn't expand `${VAR}` in URLs (it treats them as literal strings, producing
-  "relative URL without a base" at startup), so the plugin does **not** ship a bundled
-  `.mcp.json`. Users register the server once at install time:
-  `codex mcp add the-librarian --url "$LIBRARIAN_MCP_URL" --bearer-token-env-var LIBRARIAN_AGENT_TOKEN`.
-  Codex then reads the bearer token from env on every tool call.
+- **MCP transport:** the remote Librarian is HTTP, but Codex's `.mcp.json` parser
+  doesn't expand `${VAR}` in a remote `url` (it treats it as a literal string, producing
+  "relative URL without a base" at startup — openai/codex#7521). What Codex *does*
+  support is the `env_vars` allowlist for **stdio** servers: it forwards named shell
+  env vars into the spawned subprocess. So the plugin **bundles a stdio↔HTTP proxy**
+  (`src/mcp-stdio-proxy.mjs` → `bin/librarian-mcp-proxy.js`) and declares it in a
+  committed `.mcp.json` as one stdio server with
+  `env_vars = ["LIBRARIAN_MCP_URL", "LIBRARIAN_AGENT_TOKEN"]`. Codex spawns the proxy,
+  forwards both per-user vars, and the proxy relays each JSON-RPC message to the remote
+  endpoint over the shared HTTP path (bearer in header only). The legacy
+  `codex mcp add the-librarian --url "$LIBRARIAN_MCP_URL" --bearer-token-env-var LIBRARIAN_AGENT_TOKEN`
+  remains documented as a fallback.
 - **No Python.** Codex hooks are language-agnostic; Node mirrors the Claude plugin
   and lets us lift large chunks of `bin/librarian-claude-hook.js` verbatim.
 
@@ -87,7 +93,8 @@ the-librarian-codex-plugin/
 ├── plugins/
 │   └── the-librarian/                  # Plugin runtime — what PLUGIN_ROOT resolves to at install
 │       ├── .codex-plugin/
-│       │   └── plugin.json             # Codex manifest (name, version, skills, hooks). NO mcpServers — see Integration notes.
+│       │   └── plugin.json             # Codex manifest (name, version, skills, mcpServers, hooks).
+│       ├── .mcp.json                   # Bundled stdio proxy: node bin/librarian-mcp-proxy.js + env_vars allowlist.
 │       ├── hooks/
 │       │   └── hooks.json              # UserPromptSubmit → scripts/dispatch.sh
 │       ├── skills/
@@ -97,13 +104,15 @@ the-librarian-codex-plugin/
 │       │   └── dispatch.sh             # Reads stdin, sets env, exec's node bin/librarian-codex-hook.js
 │       ├── bin/
 │       │   ├── librarian-codex-hook.js # Bundled dispatcher (event-name → handler)
+│       │   ├── librarian-mcp-proxy.js  # Bundled stdio↔HTTP MCP proxy Codex spawns
 │       │   └── PROVENANCE.json         # Source SHA, build date, esbuild version (not committed)
-│       └── src/                        # Pre-bundle sources (handlers, source_ref builder, log)
+│       └── src/                        # Pre-bundle sources (handlers, source_ref builder, log, proxy)
 │           ├── handlers/
 │           │   └── user-prompt-submit.mjs
 │           ├── dispatch.mjs
 │           ├── log.mjs
 │           ├── mcp-client.mjs
+│           ├── mcp-stdio-proxy.mjs
 │           └── source-ref.mjs
 ├── scripts/                            # Dev tooling — not shipped with the plugin
 │   ├── build-bundle.mjs                # esbuild config

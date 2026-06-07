@@ -144,12 +144,37 @@ var McpClientError = class extends Error {
     this.status = extra.status;
   }
 };
-function createMcpClient(config, transport) {
+function createRpcSender(config, transport) {
   const url = parseEndpoint(config.endpoint);
   const safeEndpoint = `${url.protocol}//${url.host}${url.pathname}`;
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxResponseBytes = config.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
   const send = transport ?? defaultTransport(maxResponseBytes);
+  return {
+    safeEndpoint,
+    // Sends a single, already-serialised JSON-RPC request body and returns
+    // the raw `{ status, body }`. Never embeds the token anywhere but the
+    // Authorization header.
+    async send(body) {
+      const headers = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${config.token}`
+      };
+      try {
+        return await send({ url: config.endpoint, body, headers, timeoutMs });
+      } catch (err) {
+        if (err instanceof McpClientError) throw err;
+        if (isTimeout(err)) {
+          throw new McpClientError("timeout", `request timed out after ${timeoutMs}ms`);
+        }
+        throw new McpClientError("network", `could not reach the Librarian at ${safeEndpoint}`);
+      }
+    }
+  };
+}
+function createMcpClient(config, transport) {
+  const sender = createRpcSender(config, transport);
   return {
     async callTool(name, args) {
       const body = JSON.stringify({
@@ -158,21 +183,7 @@ function createMcpClient(config, transport) {
         method: "tools/call",
         params: { name, arguments: args }
       });
-      const headers = {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: `Bearer ${config.token}`
-      };
-      let response;
-      try {
-        response = await send({ url: config.endpoint, body, headers, timeoutMs });
-      } catch (err) {
-        if (err instanceof McpClientError) throw err;
-        if (isTimeout(err)) {
-          throw new McpClientError("timeout", `${name} timed out after ${timeoutMs}ms`);
-        }
-        throw new McpClientError("network", `${name} could not reach the Librarian at ${safeEndpoint}`);
-      }
+      const response = await sender.send(body);
       if (response.status !== 200) {
         throw new McpClientError("http", `${name} returned HTTP ${response.status}`, {
           status: response.status
