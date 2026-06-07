@@ -1,6 +1,6 @@
 {
   "name": "the-librarian",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Durable memory + cross-harness handoffs for Codex, backed by a remote Librarian MCP server.",
   "author": {
     "name": "Jim Sangwine",
