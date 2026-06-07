@@ -1,6 +1,6 @@
 {
   "name": "the-librarian-codex-plugin",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Codex plugin for The Librarian: memory + cross-harness handoffs over a remote Librarian MCP server.",
   "license": "Apache-2.0",

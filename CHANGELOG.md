@@ -7,6 +7,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-06-07
+
 ### Added
 
 - **Awareness primer injected every turn.** On `UserPromptSubmit`, the same
@@ -198,5 +200,7 @@ those harnesses.
 - Marketplace.json source schema diverges from the build docs — the
   `source` field is nested, not flat. Captured in `notes/marketplace-shape.md`.
 
-[Unreleased]: https://github.com/JimJafar/the-librarian-codex-plugin/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/JimJafar/the-librarian-codex-plugin/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/JimJafar/the-librarian-codex-plugin/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/JimJafar/the-librarian-codex-plugin/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/JimJafar/the-librarian-codex-plugin/releases/tag/v0.1.0
