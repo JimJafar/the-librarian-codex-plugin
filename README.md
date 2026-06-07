@@ -178,7 +178,7 @@ Then test the **bundled proxy** in isolation — it should produce the same
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
   | LIBRARIAN_MCP_URL="$LIBRARIAN_MCP_URL" \
     LIBRARIAN_AGENT_TOKEN="$LIBRARIAN_AGENT_TOKEN" \
-    node "$(codex plugin path the-librarian)/bin/librarian-mcp-proxy.js"
+    node "<plugin-install-dir>/bin/librarian-mcp-proxy.js"
 ```
 
 A healthy response is a single JSON line:
