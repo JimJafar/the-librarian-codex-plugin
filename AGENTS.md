@@ -139,9 +139,11 @@ CI runs all four on Node 20 / 22 / 24 plus a bundle-drift check.
 
 ## 4. Gotchas (repo-specific)
 
-- **`plugins/the-librarian/bin/librarian-codex-hook.js` IS committed.**
-  Users don't run `npm install` — they execute the bundled file directly.
-  Always rebuild before committing source changes; CI gates this.
+- **The bundled `bin/*.js` files ARE committed.** Two of them:
+  `librarian-codex-hook.js` (the hook) and `librarian-mcp-proxy.js` (the
+  bundled stdio↔HTTP MCP server Codex spawns). Users don't run `npm
+  install` — they execute the bundled files directly. Always rebuild before
+  committing source changes; CI gates this.
 - **`plugins/the-librarian/bin/PROVENANCE.json` is NOT committed.** It's a build receipt
   that embeds the current commit SHA and timestamp, so it drifts every
   commit. Gitignored; regenerated locally and by CI.

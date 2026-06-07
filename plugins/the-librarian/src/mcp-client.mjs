@@ -20,12 +20,52 @@ export class McpClientError extends Error {
   }
 }
 
-export function createMcpClient(config, transport) {
+// Low-level JSON-RPC sender. Owns the single security-critical HTTP path the
+// whole plugin shares: endpoint validation (http(s) only, no embedded creds,
+// no query string), bearer-in-header-only, `redirect: "error"` so a 3xx can
+// never carry the token cross-origin, and a response-size cap. Both the
+// high-level `createMcpClient` (used by hook handlers) and the stdio↔HTTP
+// proxy (`mcp-stdio-proxy.mjs`) route through this — there must be exactly
+// one outbound credential path in the codebase.
+//
+// Returns the raw HTTP `{ status, body }`. Transport failures are normalised
+// to a `timeout`/`network` McpClientError; an HTTP/JSON-RPC error is left for
+// the caller to interpret (the proxy relays raw JSON-RPC error bodies; the
+// client raises typed errors). The returned object exposes `safeEndpoint`
+// (host+path, no credentials) for diagnostics.
+export function createRpcSender(config, transport) {
   const url = parseEndpoint(config.endpoint);
   const safeEndpoint = `${url.protocol}//${url.host}${url.pathname}`;
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxResponseBytes = config.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
   const send = transport ?? defaultTransport(maxResponseBytes);
+
+  return {
+    safeEndpoint,
+    // Sends a single, already-serialised JSON-RPC request body and returns
+    // the raw `{ status, body }`. Never embeds the token anywhere but the
+    // Authorization header.
+    async send(body) {
+      const headers = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${config.token}`,
+      };
+      try {
+        return await send({ url: config.endpoint, body, headers, timeoutMs });
+      } catch (err) {
+        if (err instanceof McpClientError) throw err;
+        if (isTimeout(err)) {
+          throw new McpClientError("timeout", `request timed out after ${timeoutMs}ms`);
+        }
+        throw new McpClientError("network", `could not reach the Librarian at ${safeEndpoint}`);
+      }
+    },
+  };
+}
+
+export function createMcpClient(config, transport) {
+  const sender = createRpcSender(config, transport);
 
   return {
     async callTool(name, args) {
@@ -35,22 +75,8 @@ export function createMcpClient(config, transport) {
         method: "tools/call",
         params: { name, arguments: args },
       });
-      const headers = {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: `Bearer ${config.token}`,
-      };
 
-      let response;
-      try {
-        response = await send({ url: config.endpoint, body, headers, timeoutMs });
-      } catch (err) {
-        if (err instanceof McpClientError) throw err;
-        if (isTimeout(err)) {
-          throw new McpClientError("timeout", `${name} timed out after ${timeoutMs}ms`);
-        }
-        throw new McpClientError("network", `${name} could not reach the Librarian at ${safeEndpoint}`);
-      }
+      const response = await sender.send(body);
 
       if (response.status !== 200) {
         throw new McpClientError("http", `${name} returned HTTP ${response.status}`, {
