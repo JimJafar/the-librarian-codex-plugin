@@ -16,3 +16,8 @@ AUTONOMOUS-BUILD-NOTES-*.md
 # Plugin runtime data (only ever exists at $PLUGIN_DATA on user machines)
 state.json
 log.jsonl
+
+# pnpm cruft — this repo standardises on npm (committed package-lock.json).
+# A stray pnpm run leaves these behind; they are not part of the project.
+pnpm-lock.yaml
+pnpm-workspace.yaml
