@@ -124,7 +124,7 @@ drive four user-facing verbs:
 | --- | --- |
 | "hand this off" / "we're done for now" | Author a five-section narrative and persist via `store_handoff` |
 | "pick up where I left off" / "what was I doing" | Call `list_handoffs`, pick one, atomically claim with `claim_handoff` and inject the document |
-| "save what we learned" / "remember the X pattern" | Extract durable lessons, propose them via `propose_memory` |
+| "save what we learned" / "remember the X pattern" | Extract durable lessons, save the user-picked ones via `remember` (protected categories still route to proposals) |
 | "go private" / "back on the record" | Inject the `[librarian:private=on\|off]` marker — pure in-conversation, no server state |
 | "what do I know about …" | `recall` |
 | "remember that …" | `remember` |

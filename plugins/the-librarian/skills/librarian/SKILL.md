@@ -58,8 +58,11 @@ slash command surface; the LLM is the interface.
    project facts, validated patterns the user confirmed, explicit user
    corrections.
 3. Present as a numbered multi-select list. Ask which to keep.
-4. For each chosen lesson, call `propose_memory` (not `remember`) with
-   `title`, `body`, `tags`, `applies_to`.
+4. For each chosen lesson, call `remember` with `title`, `body`, `tags`,
+   `applies_to`. The user picking the lesson _is_ the review, so don't
+   double-gate it behind a proposal — `remember` files non-protected lessons
+   directly (deduped/merged); the server still routes protected categories
+   (identity, relationship) to the proposal queue on its own.
 
 ### `/toggle-private` (the user says "go private", "back on the record", …)
 
