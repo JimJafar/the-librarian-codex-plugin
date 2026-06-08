@@ -5,7 +5,7 @@ file. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.1] — 2026-06-08
 
 ### Changed
 
@@ -16,6 +16,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   directly (deduped/merged) while the server still routes protected categories
   (identity, relationship) to the proposal queue. Coordinated with the server
   fix that routes `propose_memory` through the curator (the-librarian ADR 0004).
+- **Release process automated — every merge to `main` is a release.** Added
+  `.github/workflows/release.yml` (tags + publishes the GitHub release on a
+  version-bumping merge) and a `scripts/check-release.mjs` guard wired into CI.
+  The CHANGELOG no longer carries an `[Unreleased]` section; every PR bumps the
+  version (`package.json` + `.codex-plugin/plugin.json`) with a dated entry.
 
 ## [0.4.0] — 2026-06-07
 
@@ -235,7 +240,8 @@ those harnesses.
 - Marketplace.json source schema diverges from the build docs — the
   `source` field is nested, not flat. Captured in `notes/marketplace-shape.md`.
 
-[Unreleased]: https://github.com/JimJafar/the-librarian-codex-plugin/compare/v0.3.0...HEAD
+[0.4.1]: https://github.com/JimJafar/the-librarian-codex-plugin/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/JimJafar/the-librarian-codex-plugin/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/JimJafar/the-librarian-codex-plugin/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/JimJafar/the-librarian-codex-plugin/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/JimJafar/the-librarian-codex-plugin/releases/tag/v0.1.0
