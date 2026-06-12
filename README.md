@@ -10,15 +10,14 @@ Sibling plugins:
 
 It gives Codex:
 
-- the Librarian **memory MCP tools** (`recall`, `remember`, `propose_memory`,
-  `verify_memory`, `update_memory`, `list_proposals`) over your remote
-  endpoint — **auto-configured** via a bundled stdio proxy (no manual
-  `codex mcp add`);
+- the Librarian **memory MCP tools** (`recall`, `remember`, `flag_memory`)
+  over your remote endpoint — **auto-configured** via a bundled stdio proxy
+  (no manual `codex mcp add`);
 - the **handoff MCP tools** (`store_handoff`, `list_handoffs`,
-  `claim_handoff`) for atomic cross-harness handover;
-- an umbrella **`@librarian` skill** that teaches the LLM four user-facing
-  verbs — `/handoff`, `/takeover`, `/learn`, `/toggle-private` — to drive
-  the tools;
+  `claim_handoff`) for atomic cross-harness handover, plus the **skill /
+  reference tools** (`list_skills`, `get_skill`, `search_references`);
+- four user-facing verbs the LLM drives directly — `/handoff`, `/takeover`,
+  `/learn`, `/toggle-private`;
 - a **per-turn conv-state injection hook** that keeps the model aware of
   its current conv-state — `conv_id` and the `off_record` flag, keyed by
   harness — so that state survives compaction.
@@ -115,10 +114,10 @@ reads them directly; Codex forwards both into the bundled stdio proxy via the
 
 ## What it does
 
-### Memory + handoffs, on demand (`@librarian`)
+### Memory + handoffs, on demand
 
-Type `@librarian` to load the operating manual; the model then knows how to
-drive four user-facing verbs:
+The MCP tools' own descriptions and the per-turn conv-state primer teach the
+model how to drive four user-facing verbs:
 
 | User says… | What the agent does |
 | --- | --- |
@@ -128,11 +127,11 @@ drive four user-facing verbs:
 | "go private" / "back on the record" | Inject the `[librarian:private=on\|off]` marker — pure in-conversation, no server state |
 | "what do I know about …" | `recall` |
 | "remember that …" | `remember` |
-| (after using a recall hit) | `verify_memory` — **mandatory** |
+| (after using a recall hit) | `flag_memory(memory_id, reason)` to correct a stale or wrong hit |
 
-Codex plugins can't register `/`-style slash commands, so the `@librarian`
-skill is the surface here. The same verbs work in every Librarian harness
-(Claude Code, OpenCode, Hermes, Pi).
+Codex plugins can't register `/`-style slash commands, so the LLM is the
+surface here — it invokes the verbs directly from what the user asks. The same
+verbs work in every Librarian harness (Claude Code, OpenCode, Hermes, Pi).
 
 ### Per-turn conv-state injection
 
@@ -153,8 +152,8 @@ model unchanged.
 working as designed. Codex hashes each hook command; a rebuild changes the
 hash, so re-approval is required. There's no signing.
 
-**`@librarian` doesn't appear in the picker.** Check `codex plugin list`
-shows the plugin enabled, and `~/.codex/config.toml` contains a
+**The plugin's tools don't show up.** Check `codex plugin list` shows the
+plugin enabled, and `~/.codex/config.toml` contains a
 `[plugins."the-librarian@..."]` entry with `enabled = true`. Restart Codex
 after install.
 

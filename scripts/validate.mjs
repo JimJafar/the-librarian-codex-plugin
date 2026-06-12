@@ -33,11 +33,14 @@ function readJsonOrFail(rel, base = pluginRoot) {
 function checkPluginJson() {
   const m = readJsonOrFail(".codex-plugin/plugin.json");
   if (!m) return;
-  const required = ["name", "version", "description", "author", "license", "skills", "interface"];
+  const required = ["name", "version", "description", "author", "license", "interface"];
   for (const f of required) if (!(f in m)) fail(`.codex-plugin/plugin.json: missing required field '${f}'`);
   if (m.name && !/^[a-z][a-z0-9-]*$/.test(m.name)) fail(`.codex-plugin/plugin.json: name must be kebab-case`);
   if (m.version && !/^\d+\.\d+\.\d+/.test(m.version)) fail(`.codex-plugin/plugin.json: version must be semver`);
-  if (m.skills !== "./skills/") fail(`.codex-plugin/plugin.json: skills must equal './skills/'`);
+  // ADR 0006 #6 retired the bundled skill; the plugin ships no skills, so the
+  // optional `skills` pointer must be absent (an empty dir can't be tracked
+  // by git, and a dangling pointer would make the Codex loader scan nothing).
+  if ("skills" in m) fail(`.codex-plugin/plugin.json: skills key must be absent — the bundled skill was retired (ADR 0006 #6)`);
   // The plugin bundles the Librarian MCP server as a stdio↔HTTP proxy and
   // declares it here. Codex can't expand ${VAR} into a remote HTTP url, but
   // it CAN forward named shell env vars into a bundled stdio server via the
@@ -165,19 +168,6 @@ function checkMarketplaceJson() {
   }
 }
 
-function checkSkillMd() {
-  const p = path.join(pluginRoot, "skills/librarian/SKILL.md");
-  if (!fs.existsSync(p)) {
-    fail(`skills/librarian/SKILL.md: missing`);
-    return;
-  }
-  const body = fs.readFileSync(p, "utf8");
-  if (body.trim().length === 0) fail(`skills/librarian/SKILL.md: empty`);
-  if (!/^---\nname: librarian\n/.test(body)) fail(`skills/librarian/SKILL.md: must start with 'name: librarian' frontmatter`);
-  const lines = body.split("\n").length;
-  if (lines > 120) fail(`skills/librarian/SKILL.md: ${lines} lines exceeds the 120-line budget`);
-}
-
 // The bundles must be self-contained: any unresolved external import would
 // crash at runtime on the user's machine because we don't ship node_modules.
 // Allow only Node built-ins. The esbuild output is ESM, so we scan both CJS
@@ -223,7 +213,6 @@ checkPluginJson();
 checkMcpJson();
 checkHooksJson();
 checkMarketplaceJson();
-checkSkillMd();
 checkBundle();
 checkProxyBundle();
 

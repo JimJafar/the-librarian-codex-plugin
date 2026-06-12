@@ -27,9 +27,10 @@ test("plugin manifest declares the required core fields", () => {
   assert.ok(Array.isArray(m.keywords) && m.keywords.length > 0);
 });
 
-test("plugin manifest declares the skills pointer", () => {
+test("plugin manifest carries no skills pointer (bundled skill retired, ADR 0006 #6)", () => {
   const m = readJson(".codex-plugin/plugin.json");
-  assert.equal(m.skills, "./skills/", "skills must point at the conventional dir for the Codex loader to find SKILL.md files");
+  assert.ok(!("skills" in m), "the skills key must be absent — the plugin no longer ships a bundled skill");
+  assert.ok(!fs.existsSync(path.join(pluginRoot, "skills")), "the skills/ directory must be gone");
 });
 
 test("plugin manifest declares the interface block the Codex UI needs", () => {
@@ -92,33 +93,11 @@ test("the bundled .mcp.json declares one stdio proxy server with the env_vars al
   assert.ok(!/Bearer\s+\S/.test(JSON.stringify(entry)), "no literal bearer token in the manifest");
 });
 
-test("the @librarian skill exists with non-empty SKILL.md", () => {
-  const skillPath = path.join(pluginRoot, "skills/librarian/SKILL.md");
-  assert.ok(fs.existsSync(skillPath), "skills/librarian/SKILL.md must exist");
-  const body = fs.readFileSync(skillPath, "utf8");
-  assert.ok(body.trim().length > 0, "SKILL.md must not be empty");
-});
-
-test("@librarian SKILL.md stays within the 120-line budget and covers the required sections", () => {
-  const body = fs.readFileSync(path.join(pluginRoot, "skills/librarian/SKILL.md"), "utf8");
-  const lines = body.split("\n").length;
-  assert.ok(lines <= 120, `SKILL.md is ${lines} lines — budget is 120 (per PLAN.md Q5)`);
-  // YAML frontmatter required so Codex's skill loader picks up the name + description
-  assert.match(body, /^---\nname: librarian\n/, "SKILL.md must start with name=librarian frontmatter");
-  assert.match(body, /description:/, "frontmatter must include a description");
-  // sessions-rethink PR 3 — the four user-facing verbs replace the
-  // old `/lib:session` family. The skill must teach each one.
-  for (const verb of ["/handoff", "/takeover", "/learn", "/toggle-private"]) {
-    assert.match(body, new RegExp(verb.replace("/", "\\/")), `must document the ${verb} verb`);
-  }
-  // Memory tools + invariants still required
-  assert.match(body, /Memory tools/i, "must document the memory tools");
-  assert.match(body, /Invariants/i, "must document the invariants (verify-after-recall, private mode)");
-  // Specific invariants the system depends on
-  assert.match(body, /verify_memory/, "must teach verify-after-recall");
-  assert.match(
-    body,
-    /\[librarian:private=on\|off\]|private mode/i,
-    "must document the in-conversation private marker",
+test("no bundled skill ships with the plugin (ADR 0006 #6)", () => {
+  // The auto-loaded "how to use" skill was retired: the per-turn conv-state
+  // primer and the MCP tools' own descriptions are now the teaching surface.
+  assert.ok(
+    !fs.existsSync(path.join(pluginRoot, "skills")),
+    "skills/ must be gone — the bundled librarian skill was removed",
   );
 });

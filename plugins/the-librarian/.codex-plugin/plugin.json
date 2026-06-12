@@ -1,6 +1,6 @@
 {
   "name": "the-librarian",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Durable memory + cross-harness handoffs for Codex, backed by a remote Librarian MCP server.",
   "author": {
     "name": "Jim Sangwine",
@@ -10,13 +10,12 @@
   "repository": "https://github.com/JimJafar/the-librarian-codex-plugin",
   "license": "Apache-2.0",
   "keywords": ["memory", "handoff", "mcp", "librarian", "recall", "cross-harness"],
-  "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "hooks": "./hooks/hooks.json",
   "interface": {
     "displayName": "The Librarian",
     "shortDescription": "Durable memory + cross-harness handoffs for Codex",
-    "longDescription": "The Librarian gives Codex a remote memory layer (recall / remember / propose_memory / verify_memory) plus four user-facing verbs (/handoff, /takeover, /learn, /toggle-private). A per-turn conv-state injection hook keeps the model aware of the current domain across compactions. Sibling to the Claude Code, Hermes, OpenCode, and Pi plugins; handoffs round-trip cleanly between them.",
+    "longDescription": "The Librarian gives Codex a remote memory layer (recall / remember / flag_memory) plus four user-facing verbs (/handoff, /takeover, /learn, /toggle-private). A per-turn conv-state injection hook keeps the model aware of the current domain across compactions. Sibling to the Claude Code, Hermes, OpenCode, and Pi plugins; handoffs round-trip cleanly between them.",
     "developerName": "Jim Sangwine",
     "category": "Engineering",
     "capabilities": ["Read", "Write"],

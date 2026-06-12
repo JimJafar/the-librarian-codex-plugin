@@ -12,13 +12,14 @@ Status: **draft, awaiting human approval** before Phase 2 (Plan).
 Give Codex (CLI and desktop app) the same Librarian feature surface the Claude Code
 plugin gives Claude Code:
 
-- the Librarian **memory + session MCP tools** (`recall`, `remember`, `verify_memory`,
-  `start_session`, `list_sessions`, `continue_session`, `checkpoint_session`,
-  `pause_session`, `end_session`, `record_session_event`, `search_sessions`, …) over the
-  user's remote endpoint;
-- an **umbrella `@librarian` skill** that documents the canonical `/lib:session <verb>`
-  contract and shows the model how to drive the MCP tools (Codex plugins can't register
-  `/`-style slash commands — only `@skills`);
+- the Librarian **9-verb agent MCP surface** (`recall`, `remember`, `flag_memory`,
+  `store_handoff`, `list_handoffs`, `claim_handoff`, `list_skills`, `get_skill`,
+  `search_references`, plus the internal `conv_state_*` primitives; the-librarian
+  ADR 0006) over the user's remote endpoint;
+- the model drives four user-facing verbs (`/handoff`, `/takeover`, `/learn`,
+  `/toggle-private`) directly from the MCP tool descriptions and the per-turn
+  conv-state primer (Codex plugins can't register `/`-style slash commands, and
+  the plugin ships no bundled skill);
 - **automatic session lifecycle** — a session starts on the first prompt
   (`SessionStart` hook), checkpoints on compaction (`PostCompact`) and at turn end
   (`Stop`, debounced), and reconciles stale active sessions on next `SessionStart`
@@ -93,13 +94,10 @@ the-librarian-codex-plugin/
 ├── plugins/
 │   └── the-librarian/                  # Plugin runtime — what PLUGIN_ROOT resolves to at install
 │       ├── .codex-plugin/
-│       │   └── plugin.json             # Codex manifest (name, version, skills, mcpServers, hooks).
+│       │   └── plugin.json             # Codex manifest (name, version, mcpServers, hooks; no skills — ADR 0006 #6).
 │       ├── .mcp.json                   # Bundled stdio proxy: node bin/librarian-mcp-proxy.js + env_vars allowlist.
 │       ├── hooks/
 │       │   └── hooks.json              # UserPromptSubmit → scripts/dispatch.sh
-│       ├── skills/
-│       │   └── librarian/
-│       │       └── SKILL.md            # Umbrella skill: how to drive the memory + handoff tools + privacy
 │       ├── scripts/
 │       │   └── dispatch.sh             # Reads stdin, sets env, exec's node bin/librarian-codex-hook.js
 │       ├── bin/
@@ -189,8 +187,8 @@ export async function handleUserPromptSubmit(payload) {
     pipes synthetic Codex hook payloads (`SessionStart`, `UserPromptSubmit`, `Stop`,
     `PostCompact`) into the built `bin/librarian-codex-hook.js`. Asserts the right MCP
     tool calls happen with the right args.
-  - **Manual:** install in the Codex desktop app on this machine, drive each verb via
-    `@librarian`, verify on the Librarian dashboard.
+  - **Manual:** install in the Codex desktop app on this machine, drive each verb
+    directly from natural-language prompts, verify on the Librarian dashboard.
 
 ## Boundaries
 
@@ -229,8 +227,9 @@ export async function handleUserPromptSubmit(payload) {
 3. Typing "off the record" in a prompt ends the attached session within one turn and
    subsequent prompts produce no `record_session_event` entries until "back on the
    record" (or the inverse marker) is detected.
-4. `@librarian` is discoverable in the Codex `@` picker and its `SKILL.md` correctly
-   teaches the model to call the 8 MCP tools for the 8 canonical verbs.
+4. The model drives the four user-facing verbs (`/handoff`, `/takeover`, `/learn`,
+   `/toggle-private`) from the MCP tool descriptions and the conv-state primer — no
+   bundled skill ships (ADR 0006 #6).
 5. A `PostCompact` event triggers `checkpoint_session` with an updated
    `rolling_summary`.
 6. `Stop` events update a debounced `last_turn` counter and call `record_session_event`
@@ -261,9 +260,10 @@ export async function handleUserPromptSubmit(payload) {
   server with a stale `active` session if Codex exits hard. Plan should specify: on
   `SessionStart(source=resume)`, look up sessions for this `source_ref`; if one is
   `active`, pause it before starting / continuing.
-- **`@librarian` skill content.** SKILL.md must be tight — Codex skills are loaded
-  into the model context, so the canonical verb table + the verify-after-recall rule
-  + the privacy invariants are in scope, but not the full Librarian docs.
+- **No bundled skill (ADR 0006 #6).** The plugin ships no `SKILL.md`; the MCP tool
+  descriptions and the per-turn conv-state primer are the teaching surface. The
+  canonical verb contract, the flag-after-recall rule, and the privacy invariants
+  ride those instead of a context-loaded skill file.
 - **Marketplace entry shape.** The CLI form is documented (`source: "url"`,
   `git-subdir`, `local`), but the per-plugin metadata fields (category, `policy.*`,
   `capabilities`) need a sample read from `~/.codex/.tmp/bundled-marketplaces/`.
