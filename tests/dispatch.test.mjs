@@ -56,9 +56,7 @@ test("dispatch returns {} for the retired SessionStart / PostCompact / Stop even
 test("dispatch routes UserPromptSubmit and logs the canonical event line", async () => {
   await withTmpDataDir("user-prompt-submit", async (dir) => {
     const result = await dispatch({ hook_event_name: "UserPromptSubmit", prompt: "hi" });
-    // UserPromptSubmit injects the standing librarian awareness primer (spec 041).
-    assert.equal(result.hookSpecificOutput.hookEventName, "UserPromptSubmit");
-    assert.match(result.hookSpecificOutput.additionalContext, /<librarian>/);
+    assert.deepEqual(result, {});
     const events = fs
       .readFileSync(path.join(dir, "log.jsonl"), "utf8")
       .trim()
