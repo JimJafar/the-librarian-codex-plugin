@@ -5,6 +5,35 @@ file. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-06-12
+
+### Changed
+
+- **Aligned to the server's 9-verb agent surface (the-librarian ADR
+  0006).** The slimmed agent-facing MCP surface is `recall`, `remember`,
+  `flag_memory`, `store_handoff`, `list_handoffs`, `claim_handoff`,
+  `list_skills`, `get_skill`, `search_references` (plus the internal
+  `conv_state_*` primitives). The plugin no longer references the retired
+  verbs: `verify_memory` → `flag_memory(memory_id, reason)`,
+  `propose_memory` → `remember` (the server's inbox routing subsumes it),
+  `start_context` → dropped in favour of the per-turn `conv_state_get`
+  primer the `UserPromptSubmit` injection hook already emits, and
+  `session_manifest` / `find_skills` → `list_skills`. README, SPEC, PLAN,
+  the manifest `longDescription`, and the validate/manifest tests updated
+  to match. The injection hook itself is unchanged.
+
+### Removed
+
+- **Dropped the bundled `@librarian` skill (ADR 0006 #6).** There is no
+  longer an auto-loaded "how to use" skill; the MCP tools' own descriptions
+  and the per-turn conv-state primer are the teaching surface.
+  `plugins/the-librarian/skills/librarian/SKILL.md` and the whole `skills/`
+  dir are deleted. The optional `"skills": "./skills/"` manifest pointer is
+  dropped (an empty dir can't be git-tracked and a dangling pointer would
+  make the Codex loader scan nothing); `scripts/validate.mjs` now asserts
+  the key is *absent*, and `tests/manifest.test.mjs` asserts the dir is
+  gone.
+
 ## [0.4.1] — 2026-06-08
 
 ### Changed
@@ -240,6 +269,7 @@ those harnesses.
 - Marketplace.json source schema diverges from the build docs — the
   `source` field is nested, not flat. Captured in `notes/marketplace-shape.md`.
 
+[0.5.0]: https://github.com/JimJafar/the-librarian-codex-plugin/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/JimJafar/the-librarian-codex-plugin/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/JimJafar/the-librarian-codex-plugin/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/JimJafar/the-librarian-codex-plugin/compare/v0.2.0...v0.3.0

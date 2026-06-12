@@ -1,7 +1,11 @@
 # Implementation Plan: the-librarian-codex-plugin
 
-Companion to [`SPEC.md`](./SPEC.md). Status: **draft, awaiting human approval**
-before Phase 3 (Tasks → Implement).
+Companion to [`SPEC.md`](./SPEC.md). Status: **historical** — records the
+original build plan. The session-lifecycle architecture (multiple hooks,
+`start_session`/`checkpoint_session`/…) and the bundled `@librarian` skill it
+describes have since been retired; the plugin now ships a single
+`UserPromptSubmit` conv-state hook, the 9-verb agent surface, and **no bundled
+skill** (the-librarian ADR 0006). See `CHANGELOG.md` for the current shape.
 
 ## Overview
 
@@ -225,7 +229,7 @@ table and the privacy + verify-after-recall invariants.
   spec", visibility: "agent_private"})`.
 - Ask: "list my sessions." Model calls `list_sessions({})`.
 - Ask: "remember that I prefer Node over Python for hooks." Model calls
-  `propose_memory` or `remember` per the protected-categories rule.
+  `remember`; the server routes protected categories to the proposal queue.
 
 **Files touched:** `skills/librarian/SKILL.md`.
 
